@@ -1,0 +1,3 @@
+[submodule "min-caml"]
+	path = min-caml
+	url = https://github.com/esumii/min-caml.git
