@@ -25,7 +25,8 @@ tokens :-
   <0> $white+               ;
   <0> "(*"                  { begin state_comment }
   <state_comment> "*)"      { begin 0 }
-  <state_comment> . ;
+  <state_comment> .         ;
+  <state_comment> $white+   ;
   <0> $letter $identletter* { ident }
   <0> "("                   { tok LParen }
   <0> ")"                   { tok RParen }
