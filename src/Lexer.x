@@ -7,7 +7,7 @@ import Prelude hiding (lex)
 
 }
 
-%wrapper "monad"
+%wrapper "monadUserState"
 
 
 $space = [ \ \t \r ]                     -- horizontal white space
@@ -57,6 +57,10 @@ tokens :-
 
 {
 
+type AlexUserState = Int -- number of last fresh var
+
+alexInitUserState = 0
+
 
 alexEOF :: Alex TokPos
 alexEOF = return (EOF, AlexPn (-1) (-1) (-1))
@@ -83,20 +87,27 @@ tok t (posn,_,_,_) _ = return (t, posn)
 
 
 ident :: AlexAction TokPos
-ident (posn,_,_,s) len = return (tok, posn)
+ident (posn,_,_,s) len = Alex $ \s@AlexState{alex_ust=var} ->
+    let (var', ret) = tok var
+    in Right (s{alex_ust=var'}, (ret, posn))
   where
-    tok = case (take len s) of
-            "true"         -> Bool True
-            "false"        -> Bool False
-            "not"          -> Not
-            "if"           -> If
-            "then"         -> Then
-            "else"         -> Else
-            "let"          -> Let
-            "in"           -> In
-            "rec"          -> Rec
-            "Array.create" -> ArrayCreate
-            ident'         -> Ident ident'
+    tok :: Int -> (Int, Token)
+    tok var = case (take len s) of
+                "true"         -> (var, Bool True)
+                "false"        -> (var, Bool False)
+                "not"          -> (var, Not)
+                "if"           -> (var, If)
+                "then"         -> (var, Then)
+                "else"         -> (var, Else)
+                "let"          -> (var, Let)
+                "in"           -> (var, In)
+                "rec"          -> (var, Rec)
+                "Array.create" -> (var, ArrayCreate)
+                -- I don't want to share any state between lexer and parser, so
+                -- var_l$ prefix is used for fresh variables generated in lexing stage
+                -- and var_p$ prefix is used for ones generated in parsing stage.
+                "_"            -> (var+1, Ident $ "var_l$" ++ show var)
+                ident'         -> (var, Ident ident')
 
 
 lex :: String -> Either String [TokPos]
