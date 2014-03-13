@@ -46,9 +46,9 @@ data Ty
     | TyFloat
     | TyFun [Ty] Ty
     | TyTuple [Ty]
-    | TyArr [Ty]
+    | TyArr Ty
     | TyVar TyVar
-    deriving (Show)
+    deriving (Show, Eq)
 
 
 type TyVar = Int
