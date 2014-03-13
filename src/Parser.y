@@ -162,8 +162,21 @@ parseStr str =
       Right tokens -> Right $ evalState (parse $ init tokens) initParserState
 
 
+parseStr' :: String -> Either String (Tm, TyVar)
+parseStr' str =
+    case lex str of
+      Left err -> Left err
+      Right tokens ->
+        let (tm, state) = runState (parse $ init tokens) initParserState
+        in Right (tm, freshTy_ state)
+
+
 parseFile :: FilePath -> IO (Either String Tm)
 parseFile path = readFile path >>= return . parseStr
+
+
+parseFile' :: FilePath -> IO (Either String (Tm, TyVar))
+parseFile' path = readFile path >>= return . parseStr'
 
 
 }
