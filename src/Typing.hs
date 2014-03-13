@@ -17,14 +17,15 @@ import qualified Data.Map               as M
 
 -------------------------------------------------------------------------------
 data TypingState = TypingState
-    { unifications :: M.Map TyVar Ty
-    , freshTyVar   :: TyVar
+    { unifications_ :: M.Map TyVar Ty
+    , freshTyVar_   :: TyVar
     } deriving (Show)
 
 
 data UnificationError
     = OccursCheck Ty Ty
     | UnificationError Ty Ty
+    | UnboundVar Id
     | StrErr String
     deriving (Show)
 
@@ -36,18 +37,129 @@ newtype Unify a = Unify { unwrapUnify :: StateT TypingState (ErrorT UnificationE
     deriving (Functor, Applicative, Monad, MonadState TypingState, MonadError UnificationError)
 
 
+evalUnify :: Unify a -> TypingState -> Either UnificationError a
+evalUnify a s = runIdentity $ runErrorT $ evalStateT (unwrapUnify a) s
+
+
+runUnify :: Unify a -> TypingState -> Either UnificationError (a, TypingState)
+runUnify a s = runIdentity $ runErrorT $ runStateT (unwrapUnify a) s
+
+
 lookupTyvar :: TyVar -> Unify (Maybe Ty)
 lookupTyvar tyvar = do
-    us <- gets unifications
+    us <- gets unifications_
     return $ M.lookup tyvar us
 
 
 bindTyvar :: TyVar -> Ty -> Unify ()
 bindTyvar var ty =
-    modify (\s@TypingState{unifications=us} -> s{unifications=M.insert var ty us})
+    modify (\s@TypingState{unifications_=us} -> s{unifications_=M.insert var ty us})
+
+
+freshTyVar :: Unify TyVar
+freshTyVar = do
+    s@TypingState{freshTyVar_=ftv} <- get
+    put s{freshTyVar_=ftv+1}
+    return ftv
 
 
 -------------------------------------------------------------------------------
+infer :: M.Map Id Ty -> Tm -> Unify Ty
+infer _ TUnit = return TyUnit
+infer _ TBool{} = return TyBool
+infer _ TInt{} = return TyInt
+infer _ TFloat{} = return TyFloat
+infer env (TNot e) = do
+    unifyExp env e TyBool
+    return TyBool
+infer env (TNeg e) = do
+    unifyExp env e TyInt
+    return TyInt
+infer env (TAdd e1 e2) = do
+    unifyExp env e1 TyInt
+    unifyExp env e2 TyInt
+    return TyInt
+infer env (TSub e1 e2) = do
+    unifyExp env e1 TyInt
+    unifyExp env e2 TyInt
+    return TyInt
+infer env (TFNeg e) = do
+    unifyExp env e TyFloat
+    return TyFloat
+infer env (TFAdd e1 e2) = do
+    unifyExp env e1 TyFloat
+    unifyExp env e2 TyFloat
+    return TyFloat
+infer env (TFSub e1 e2) = do
+    unifyExp env e1 TyFloat
+    unifyExp env e2 TyFloat
+    return TyFloat
+infer env (TFMul e1 e2) = do
+    unifyExp env e1 TyFloat
+    unifyExp env e2 TyFloat
+    return TyFloat
+infer env (TFDiv e1 e2) = do
+    unifyExp env e1 TyFloat
+    unifyExp env e2 TyFloat
+    return TyFloat
+infer env (TLE e1 e2) = do
+    e1ty <- infer env e1
+    unifyExp env e2 e1ty
+    return TyBool
+infer env (TEq e1 e2) = do
+    e1ty <- infer env e1
+    unifyExp env e2 e1ty
+    return TyBool
+infer env (TIf e1 e2 e3) = do
+    unifyExp env e1 TyBool
+    e2ty <- infer env e2
+    unifyExp env e3 e2ty
+    return e2ty
+infer env (TLet (id, ty) e1 e2) = do
+    unifyExp env e1 ty
+    infer (M.insert id ty env) e2
+infer env (TVar var) =
+    case M.lookup var env of
+      Nothing -> throwError $ UnboundVar var
+      Just ty -> return ty
+infer env (TLetRec (FunDef (id, ty) args e1) e2) = do
+    let env' = M.insert id ty env
+    unifyExp (addTys args env') e1 ty
+    infer env' e2
+infer env (TApp tm args) = do
+    ret <- TyVar <$> freshTyVar
+    argTys <- mapM (infer env) args
+    unifyExp env tm (TyFun argTys ret)
+    return ret
+infer env (TTuple tms) = TyTuple <$> mapM (infer env) tms
+infer env (TLetTuple xts e1 e2) = do
+    unifyExp env e1 (TyTuple $ map snd xts)
+    infer (addTys xts env) e2
+infer env (TArr e1 e2) = do
+    unifyExp env e1 TyInt
+    TyArr <$> infer env e2
+infer env (TGet e1 e2) = do
+    ftv <- TyVar <$> freshTyVar
+    unifyExp env e1 (TyArr ftv)
+    unifyExp env e2 TyInt
+    return ftv
+infer env (TPut e1 e2 e3) = do
+    e3ty <- infer env e3
+    unifyExp env e1 e3ty
+    unifyExp env e2 TyInt
+    return TyUnit
+
+
+addTys :: [(Id, Ty)] -> M.Map Id Ty -> M.Map Id Ty
+addTys args env = foldl (flip $ uncurry M.insert) env args
+
+
+unifyExp :: M.Map Id Ty -> Tm -> Ty -> Unify ()
+unifyExp env tm ty = do
+    expty <- infer env tm
+    unify expty ty
+
+
 unify :: Ty -> Ty -> Unify ()
 unify ty1 ty2 = do
     ty1' <- prune ty1
@@ -62,7 +174,9 @@ unify ty1 ty2 = do
         unify body1 body2
       (TyTuple t1s, TyTuple t2s) -> zipWithM_ unify t1s t2s
       (TyArr t1, TyArr t2) -> unify t1 t2
-      (TyVar var1, TyVar var2) -> undefined -- TODO
+      (TyVar var1, TyVar var2) | var1 == var2 -> return ()
+      (TyVar var1, _) -> bindTyvar var1 ty2'
+      (_, TyVar var2) -> bindTyvar var2 ty1'
       _ -> throwError $ UnificationError ty1' ty2'
 
 
