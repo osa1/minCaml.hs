@@ -42,6 +42,7 @@ data FunDef = FunDef (Id, Ty) [(Id, Ty)] Tm deriving (Show)
 data Ty
     = TyUnit
     | TyBool
+    | TyInt
     | TyFloat
     | TyFun [Ty] Ty
     | TyTuple [Ty]
