@@ -1,7 +1,7 @@
 {
-module Lexer where
+module MinCaml.Lexer where
 
-import Types
+import MinCaml.Types
 
 import Prelude hiding (lex)
 

@@ -6,10 +6,11 @@ import           Control.Monad.Error
 import           Control.Monad.Identity
 import           Control.Monad.State
 import qualified Data.Map               as M
-import           Parser
 import           System.Environment
 
-import           Typing
+import           MinCaml.Parser
+import           MinCaml.Types
+import           MinCaml.Typing
 
 
 main :: IO ()
@@ -19,4 +20,5 @@ main = do
     case tm of
       Left err -> print err
       Right (tm', tyvar) ->
-        print $ evalUnify (infer M.empty tm' >>= prune) (TypingState M.empty tyvar)
+        let init_env = M.singleton "print_int" (TyFun [TyInt] TyUnit) in
+        print $ evalUnify (infer init_env tm' >>= prune) (TypingState M.empty tyvar)

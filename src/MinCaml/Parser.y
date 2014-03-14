@@ -1,19 +1,12 @@
 {
 
-module Parser where
+module MinCaml.Parser where
 
 import Prelude hiding (lex)
 import Control.Monad.State
 
-import Lexer
-import Types
-
-data ParserState = ParserState
-    { freshTy_ :: TyVar
-    , freshId_ :: Int
-    }
-
-initParserState = ParserState 0 0
+import MinCaml.Lexer
+import MinCaml.Types
 
 }
 
@@ -136,6 +129,15 @@ Pat : Pat ',' ident              {% freshTy >>= \ty -> return ($1 ++ [($3, ty)])
     | ident ',' ident            {% freshTy >>= \ty1 -> freshTy >>= \ty2 -> return [($1, ty1), ($3, ty2)] }
 
 {
+
+
+data ParserState = ParserState
+    { freshTy_ :: TyVar
+    , freshId_ :: Int
+    }
+
+initParserState = ParserState 0 0
+
 
 freshTy :: State ParserState Ty
 freshTy = do

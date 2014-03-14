@@ -1,10 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Typing where
+module MinCaml.Typing where
 
 
 -------------------------------------------------------------------------------
-import           Types
+import           MinCaml.Types
 
 import           Control.Applicative
 import           Control.Monad.Error

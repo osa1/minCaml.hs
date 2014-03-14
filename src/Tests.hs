@@ -10,9 +10,9 @@ import           System.FilePath
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
-import           Parser
-import           Types
-import           Typing
+import           MinCaml.Parser
+import           MinCaml.Types
+import           MinCaml.Typing
 
 
 main :: IO ()
