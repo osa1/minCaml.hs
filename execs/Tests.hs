@@ -32,7 +32,17 @@ tcTests :: [(String, String)] -> TestTree
 tcTests files = testGroup "type checker tests" $
     map (uncurry mkTestCase) files
   where
-    init_env = M.singleton "print_int" (TyFun [TyInt] TyUnit)
+    init_env = M.fromList
+      [ ("print_int", TyFun [TyInt] TyUnit)
+      , ("truncate", TyFun [TyFloat] TyInt)
+      , ("int_of_float", TyFun [TyFloat] TyInt)
+      , ("float_of_int", TyFun [TyInt] TyFloat)
+      , ("abs_float", TyFun [TyFloat] TyFloat)
+      , ("sqrt", TyFun [TyFloat] TyFloat)
+      , ("cos", TyFun [TyFloat] TyFloat)
+      , ("sin", TyFun [TyFloat] TyFloat)
+      , ("print_newline", TyFun [TyUnit] TyUnit)
+      ]
 
     mkTestCase fname contents = testCase fname $
       let tm = parseStr' contents in

@@ -145,7 +145,7 @@ infer env (TGet e1 e2) = do
     return ftv
 infer env (TPut e1 e2 e3) = do
     e3ty <- infer env e3
-    unifyExp env e1 e3ty
+    unifyExp env e1 (TyArr e3ty)
     unifyExp env e2 TyInt
     return TyUnit
 

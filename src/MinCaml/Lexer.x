@@ -18,7 +18,7 @@ $identletter = [a-zA-Z_0-9]              -- letters for rest of variables
 $digit    = 0-9                          -- decimal digits
 
 @digits   = $digit+
-@mantpart = @digits \. @digits
+@mantpart = @digits \. @digits | @digits \.
 
 tokens :-
 
@@ -46,7 +46,6 @@ tokens :-
   <0> ">"                   { tok Greater }
   <0> ","                   { tok Comma }
 
-  -- <0> "_"
   <0> "Array.create"        { tok ArrayCreate }
   <0> "."                   { tok Dot }
   <0> "<-"                  { tok LessMinus }

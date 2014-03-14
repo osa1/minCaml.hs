@@ -67,7 +67,9 @@ Exp : SimpleExp                  { $1 }
     | not Exp
       %prec PREC_APP             { TNot $2 }
     | '-' Exp
-      %prec PREC_UNARY_MINUS     { TNeg $2 }
+      %prec PREC_UNARY_MINUS     { case $2 of
+                                     { TFloat f -> TFNeg (TFloat f)
+                                     ; e -> TNeg e } }
     | Exp '+' Exp                { TAdd $1 $3 }
     | Exp '-' Exp                { TSub $1 $3 }
     | Exp '=' Exp                { TEq $1 $3 }
