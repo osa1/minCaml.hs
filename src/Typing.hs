@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Typing where
@@ -27,7 +26,7 @@ data UnificationError
     | UnificationError Ty Ty
     | UnboundVar Id
     | StrErr String
-    deriving (Show)
+    deriving (Show, Eq)
 
 instance Error UnificationError where
     strMsg = StrErr
@@ -124,7 +123,8 @@ infer env (TVar var) =
       Just ty -> return ty
 infer env (TLetRec (FunDef (id, ty) args e1) e2) = do
     let env' = M.insert id ty env
-    unifyExp (addTys args env') e1 ty
+    bodyTy <- infer (addTys args env') e1
+    unify ty (TyFun (map snd args) bodyTy)
     infer env' e2
 infer env (TApp tm args) = do
     ret <- TyVar <$> freshTyVar
