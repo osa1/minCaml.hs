@@ -5,6 +5,7 @@ module Main where
 import qualified Data.Map           as M
 import           System.Environment
 
+import           MinCaml.AlphaConv
 import           MinCaml.KNormal
 import           MinCaml.Parser
 import           MinCaml.Typing
@@ -23,4 +24,7 @@ main = do
             print ty
             case evalUnify (eliminateTyVars tm') st of
               Left err -> print err
-              Right tm'' -> print $ knormal init_env tm''
+              Right tm'' -> do
+                let (kn, _) = knormal init_env tm''
+                print kn
+                print $ alphaConv kn

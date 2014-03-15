@@ -1,6 +1,11 @@
 
 -- | K-normalization
-module MinCaml.KNormal where
+module MinCaml.KNormal
+  ( KNormal(..)
+  , KFunDef (..)
+  , fvs
+  , knormal
+  ) where
 
 
 import           Control.Monad.State

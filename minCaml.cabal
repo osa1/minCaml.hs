@@ -22,7 +22,8 @@ library
                        MinCaml.Typing,
                        MinCaml.Lexer,
                        MinCaml.Parser,
-                       MinCaml.KNormal
+                       MinCaml.KNormal,
+                       MinCaml.AlphaConv
   -- other-modules:
   hs-source-dirs:      src
   build-tools:         alex, happy
