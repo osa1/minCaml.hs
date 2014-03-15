@@ -1,5 +1,9 @@
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
 
 module MinCaml.Types where
+
+
+import           Data.Generics
 
 
 -------------------------------------------------------------------------------
@@ -33,8 +37,14 @@ data Tm
     | TPut Tm Tm Tm -- ^ e1.(e2) <- e3
     deriving (Show)
 
+deriving instance Data Tm
+deriving instance Typeable Tm
+
 
 data FunDef = FunDef (Id, Ty) [(Id, Ty)] Tm deriving (Show)
+
+deriving instance Data FunDef
+deriving instance Typeable FunDef
 
 -------------------------------------------------------------------------------
 -- Types
@@ -49,6 +59,9 @@ data Ty
     | TyArr Ty
     | TyVar TyVar
     deriving (Show, Eq)
+
+deriving instance Data Ty
+deriving instance Typeable Ty
 
 
 type TyVar = Int

@@ -10,6 +10,7 @@ import           Control.Applicative
 import           Control.Monad.Error
 import           Control.Monad.Identity
 import           Control.Monad.State
+import           Data.Generics
 import qualified Data.Map               as M
 -------------------------------------------------------------------------------
 
@@ -229,3 +230,8 @@ prune (TyFun tys ty) = do
 prune (TyTuple tys) = TyTuple <$> mapM prune tys
 prune (TyArr ty) = TyArr <$> prune ty
 prune ty = return ty
+
+
+-- | Replace type variables in binders with their unified types
+eliminateTyVars :: Tm -> Unify Tm
+eliminateTyVars = everywhereM $ mkM prune
