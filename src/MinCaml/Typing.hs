@@ -129,15 +129,15 @@ infer env (TIf e1 e2 e3) = do
     e2ty <- infer env e2
     unifyExp env e3 e2ty
     return e2ty
-infer env (TLet (id, ty) e1 e2) = do
+infer env (TLet (i, ty) e1 e2) = do
     unifyExp env e1 ty
-    infer (M.insert id ty env) e2
+    infer (M.insert i ty env) e2
 infer env (TVar var) =
     case M.lookup var env of
       Nothing -> throwError $ UnboundVar var
       Just ty -> return ty
-infer env (TLetRec (FunDef (id, ty) args e1) e2) = do
-    let env' = M.insert id ty env
+infer env (TLetRec (FunDef (i, ty) args e1) e2) = do
+    let env' = M.insert i ty env
     bodyTy <- infer (addTys args env') e1
     unify ty (TyFun (map snd args) bodyTy)
     infer env' e2
@@ -199,10 +199,10 @@ occursCheck :: Ty -> Ty -> Unify Bool
 occursCheck ty1 ty2 =
     case ty2 of
       TyFun tys ty -> do
-        r1 <- foldr (||) False <$> mapM (occursCheck ty1) tys
+        r1 <- or <$> mapM (occursCheck ty1) tys
         r2 <- occursCheck ty1 ty
         return (r1 || r2)
-      TyTuple tys -> foldl (||) False <$> mapM (occursCheck ty1) tys
+      TyTuple tys -> or <$> mapM (occursCheck ty1) tys
       TyArr ty -> occursCheck ty1 ty
       TyVar tyvar
         | ty1 == ty2 -> return True
