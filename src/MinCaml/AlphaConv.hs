@@ -46,7 +46,7 @@ alphaConv' env (KLetRec (KFunDef (x, t) args e1) e2) = do
     freshArgIds <- replicateM (length args) freshId
     let env' = M.fromList (zip argIds freshArgIds) `M.union` M.insert x x' env
     e1' <- alphaConv' env' e1
-    e2' <- alphaConv' env e2
+    e2' <- alphaConv' (M.insert x x' env) e2
     return $ KLetRec (KFunDef (x', t) (zip freshArgIds (map snd args)) e1') e2'
 alphaConv' env (KApp e es) = return $ KApp (find e env) (map (flip find env) es)
 alphaConv' env (KTuple xs) = return $ KTuple $ map (flip find env) xs
