@@ -20,7 +20,8 @@ library
   exposed-modules:     MinCaml.Types,
                        MinCaml.Typing,
                        MinCaml.Lexer,
-                       MinCaml.Parser
+                       MinCaml.Parser,
+                       MinCaml.KNormal
   -- other-modules:
   hs-source-dirs:      src
   build-tools:         alex, happy
