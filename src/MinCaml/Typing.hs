@@ -62,6 +62,20 @@ freshTyVar = do
     return ftv
 
 
+init_env :: M.Map Id Ty
+init_env = M.fromList
+  [ ("print_int", TyFun [TyInt] TyUnit)
+  , ("truncate", TyFun [TyFloat] TyInt)
+  , ("int_of_float", TyFun [TyFloat] TyInt)
+  , ("float_of_int", TyFun [TyInt] TyFloat)
+  , ("abs_float", TyFun [TyFloat] TyFloat)
+  , ("sqrt", TyFun [TyFloat] TyFloat)
+  , ("cos", TyFun [TyFloat] TyFloat)
+  , ("sin", TyFun [TyFloat] TyFloat)
+  , ("print_newline", TyFun [TyUnit] TyUnit)
+  ]
+
+
 -------------------------------------------------------------------------------
 infer :: M.Map Id Ty -> Tm -> Unify Ty
 infer _ TUnit = return TyUnit
