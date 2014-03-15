@@ -16,6 +16,7 @@ import           Data.Maybe          (fromJust)
 import qualified Data.Set            as S
 import           MinCaml.KNormal
 import           MinCaml.Types       hiding (FunDef)
+import           MinCaml.Typing      (init_env)
 
 
 data CC
@@ -88,7 +89,7 @@ fvs (CExtArray _) = S.empty
 
 
 closureConv :: KNormal -> (CC, M.Map Id FunDef)
-closureConv k = runState (cc M.empty S.empty k) M.empty
+closureConv k = runState (cc init_env S.empty k) M.empty
 
 
 cc :: M.Map Id Ty -> S.Set Id -> KNormal -> State (M.Map Id FunDef) CC
