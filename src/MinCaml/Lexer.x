@@ -18,7 +18,8 @@ $identletter = [a-zA-Z_0-9]              -- letters for rest of variables
 $digit    = 0-9                          -- decimal digits
 
 @digits   = $digit+
-@mantpart = @digits \. @digits | @digits \.
+@mantpart  = @digits \. @digits
+@mantpart' = @digits \.
 
 tokens :-
 
@@ -32,6 +33,7 @@ tokens :-
   <0> ")"                   { tok RParen }
   <0> @digits               { tokWValue Int }
   <0> @mantpart             { tokWValue Float }
+  <0> @mantpart'            { convertHaskellFloat }
   <0> "-"                   { tok Minus }
   <0> "+"                   { tok Plus }
   <0> "-."                  { tok MinusDot }
@@ -79,6 +81,10 @@ type TokPos = (Token, AlexPosn)
 
 tokWValue :: Read a => (a -> Token) -> AlexInput -> Int -> Alex TokPos
 tokWValue tok (posn,_,_,s) len = return (tok (read $ take len s), posn)
+
+
+convertHaskellFloat :: AlexInput -> Int -> Alex TokPos
+convertHaskellFloat (posn,_,_,s) len = return (Float (read $ take len s ++ "0"), posn)
 
 
 tok :: Token -> AlexInput -> Int -> Alex TokPos
