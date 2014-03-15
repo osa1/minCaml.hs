@@ -28,9 +28,16 @@ main = do
               Right tm'' -> do
                 let (kn, _) = knormal init_env tm''
                 print kn
-                print $ alphaConv kn
-                let (c, defs) = CC.closureConv kn
-                putStrLn "-----------------------"
+
+                putStrLn "alpha conversion -----------------------"
+                let kn' = alphaConv kn
+                print kn'
+
+                putStrLn "flatten --------------------------------"
+                let kn'' = flatten kn'
+                print kn''
+
+                putStrLn "closure conversion ---------------------"
+                let (c, defs) = CC.closureConv kn''
                 print defs
                 print c
-

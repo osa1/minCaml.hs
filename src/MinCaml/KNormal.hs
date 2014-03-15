@@ -4,6 +4,7 @@ module MinCaml.KNormal
   ( KNormal(..)
   , KFunDef (..)
   , knormal
+  , flatten
   ) where
 
 
@@ -194,3 +195,16 @@ knormal' env (TPut e1 e2 e3) = do
     e2k <- knormal' env e2
     e3k <- knormal' env e3
     insertLet e1k $ \x -> insertLet e2k $ \y -> insertLet e3k $ \z -> return (KPut x y z, TyUnit)
+
+
+-- | Flatten let-bindings
+flatten :: KNormal -> KNormal
+flatten (KIfEq x y e1 e2) = KIfEq x y (flatten e1) (flatten e2)
+flatten (KIfLe x y e1 e2) = KIfLe x y (flatten e1) (flatten e2)
+flatten (KLet xt e1 e2) =
+    let insert (KLet yt e3 e4) = KLet yt e3 (insert e4)
+        insert (KLetRec fundef e) = KLetRec fundef (insert e)
+        insert (KLetTuple yts z e) = KLetTuple yts z (insert e)
+        insert e = KLet xt e (flatten e2)
+    in insert (flatten e1)
+flatten e = e
