@@ -3,7 +3,6 @@
 module MinCaml.KNormal
   ( KNormal(..)
   , KFunDef (..)
-  , fvs
   , knormal
   ) where
 

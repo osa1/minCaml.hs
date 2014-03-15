@@ -9,6 +9,7 @@ import           MinCaml.AlphaConv
 import           MinCaml.KNormal
 import           MinCaml.Parser
 import           MinCaml.Typing
+import           MinCaml.ClosureConv as CC
 
 
 main :: IO ()
@@ -28,3 +29,8 @@ main = do
                 let (kn, _) = knormal init_env tm''
                 print kn
                 print $ alphaConv kn
+                let (c, defs) = CC.closureConv kn
+                putStrLn "-----------------------"
+                print defs
+                print c
+
