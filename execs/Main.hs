@@ -2,14 +2,15 @@
 module Main where
 
 
-import qualified Data.Map           as M
+import qualified Data.Map                  as M
 import           System.Environment
+import           Text.PrettyPrint.HughesPJ
 
 import           MinCaml.AlphaConv
+import           MinCaml.ClosureConv       as CC
 import           MinCaml.KNormal
 import           MinCaml.Parser
 import           MinCaml.Typing
-import           MinCaml.ClosureConv as CC
 
 
 main :: IO ()
@@ -40,4 +41,4 @@ main = do
                 putStrLn "closure conversion ---------------------"
                 let (c, defs) = CC.closureConv kn''
                 print defs
-                print c
+                putStrLn (renderStyle (Style PageMode 80 0.9) (CC.pprint c))

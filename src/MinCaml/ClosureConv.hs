@@ -6,17 +6,21 @@ module MinCaml.ClosureConv
   , CC (..)
   , Closure (..)
   , FunDef (..)
+  , pprint
   ) where
 
 
 import           Control.Applicative
 import           Control.Monad.State
-import qualified Data.Map            as M
-import           Data.Maybe          (fromJust)
-import qualified Data.Set            as S
+import qualified Data.Map                  as M
+import           Data.Maybe                (fromJust)
+import qualified Data.Set                  as S
+import           Text.PrettyPrint.HughesPJ
+
+
 import           MinCaml.KNormal
-import           MinCaml.Types       hiding (FunDef)
-import           MinCaml.Typing      (init_env)
+import           MinCaml.Types             hiding (FunDef)
+import           MinCaml.Typing            (init_env)
 
 
 data CC
@@ -161,3 +165,43 @@ cc env known k =
       KPut x y z -> return $ CPut x y z
       KExtArray x -> return $ CExtArray x
       KExtFunApp x args -> return $ CAppDir ("min_caml_" ++ x) args
+
+
+-- | Pretty printer
+pprint :: CC -> Doc
+pprint CUnit = text "()"
+pprint (CInt i) = int i
+pprint (CFloat f) = float f
+pprint (CNeg id) = parens $ char '-' <> text id
+pprint (CAdd i1 i2) = parens $ text i1 <+> char '+' <+> text i2
+pprint (CSub i1 i2) = parens $ text i1 <+> char '-' <+> text i2
+pprint (CFNeg id) = parens $ text "-." <> text id
+pprint (CFAdd i1 i2) = parens $ text i1 <+> text "+." <+> text i2
+pprint (CFSub i1 i2) = parens $ text i1 <+> text "-." <+> text i2
+pprint (CFMul i1 i2) = parens $ text i1 <+> text "*." <+> text i2
+pprint (CFDiv i1 i2) = parens $ text i1 <+> text "/." <+> text i2
+pprint (CIfEq i1 i2 c1 c2) = text "if" <+> text i1 <+> char '=' <+> text i2 <+> text "then"
+                               $$ nest 4 (pprint c1)
+                               $$ text "else"
+                               $$ nest 4 (pprint c2)
+pprint (CIfLe i1 i2 c1 c2) = text "if" <+> text i1 <+> char '<' <+> text i2 <+> text "then"
+                               $$ nest 4 (pprint c1)
+                               $$ text "else"
+                               $$ nest 4 (pprint c2)
+pprint (CLet (x, t) c1 c2) = sep [ hang (text "let" <+> text x <> char ':' <+> text (show t) <+> char '=')
+                                        4 (pprint c1)
+                                 , text "in"
+                                 ] $$ pprint c2
+pprint (CVar id) = text id
+pprint (CMkCls _ _ c) = pprint c
+pprint (CAppCls x args) = text x <+> hsep (map text args)
+pprint (CAppDir x args) = text x <+> hsep (map text args)
+pprint (CTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
+pprint (CLetTuple xts i c) =
+    let binders = map (\(x, t) -> text x <> text ": " <> text (show t)) xts
+    in sep [ text "let" <+> parens (sep $ punctuate (char ',') binders) <+> char '=' <+> text i
+           , text "in"
+           ] $$ pprint c
+pprint (CGet i1 i2) = parens (text i1) <> char '.' <> text i2
+pprint (CPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
+pprint (CExtArray id) = char '#' <> parens (text id)
