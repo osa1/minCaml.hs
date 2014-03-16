@@ -40,5 +40,6 @@ main = do
 
                 putStrLn "closure conversion ---------------------"
                 let (c, defs) = CC.closureConv kn''
-                print defs
+                putStrLn (renderStyle (Style PageMode 80 0.9) (CC.pprintDecls defs))
+                putStrLn ""
                 putStrLn (renderStyle (Style PageMode 80 0.9) (CC.pprint c))

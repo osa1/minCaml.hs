@@ -7,10 +7,11 @@ module MinCaml.ClosureConv
   , Closure (..)
   , FunDef (..)
   , pprint
+  , pprintDecls
   ) where
 
 
-import           Control.Applicative
+import           Control.Applicative       hiding (empty)
 import           Control.Monad.State
 import qualified Data.Map                  as M
 import           Data.Maybe                (fromJust)
@@ -198,10 +199,31 @@ pprint (CAppCls x args) = text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
 pprint (CTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
 pprint (CLetTuple xts i c) =
-    let binders = map (\(x, t) -> text x <> text ": " <> text (show t)) xts
-    in sep [ text "let" <+> parens (sep $ punctuate (char ',') binders) <+> char '=' <+> text i
-           , text "in"
-           ] $$ pprint c
+    sep [ text "let" <+> parens (pprintArgs xts) <+> char '=' <+> text i
+        , text "in"
+        ] $$ pprint c
 pprint (CGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (CPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
 pprint (CExtArray id) = char '#' <> parens (text id)
+
+
+pprintArgs :: [(Id, Ty)] -> Doc
+pprintArgs = sep . punctuate (char ',') . map (\(x, t) -> text x <> text ": " <> text (show t))
+
+
+-- | Pretty-print top-level declarations
+pprintDecls :: M.Map Id FunDef -> Doc
+pprintDecls defs = iter (M.toList defs)
+  where
+    iter [] = empty
+    iter ((id, def) : rest) =
+      hang (text id <> char ':' <+> text (show $ ty def) <+> char '=')
+           4 (pprintFunDef def) $$ iter rest
+
+
+pprintFunDef :: FunDef -> Doc
+pprintFunDef (FunDef name ty fargs fdFvs body) =
+    hang (text "fn" <> parens (pprintArgs fargs)
+                    <> brackets (pprintArgs fdFvs)
+                    <+> char '=')
+         2 (pprint body)
