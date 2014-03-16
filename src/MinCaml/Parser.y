@@ -1,4 +1,5 @@
 {
+{-# OPTINS_GHC -w #-}
 
 module MinCaml.Parser where
 

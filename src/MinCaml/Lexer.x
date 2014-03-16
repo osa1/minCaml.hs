@@ -1,4 +1,6 @@
 {
+{-# OPTIONS_GHC -w #-}
+
 module MinCaml.Lexer where
 
 import MinCaml.Types

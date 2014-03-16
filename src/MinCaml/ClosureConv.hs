@@ -173,10 +173,10 @@ pprint :: CC -> Doc
 pprint CUnit = text "()"
 pprint (CInt i) = int i
 pprint (CFloat f) = float f
-pprint (CNeg id) = parens $ char '-' <> text id
+pprint (CNeg x) = parens $ char '-' <> text x
 pprint (CAdd i1 i2) = parens $ text i1 <+> char '+' <+> text i2
 pprint (CSub i1 i2) = parens $ text i1 <+> char '-' <+> text i2
-pprint (CFNeg id) = parens $ text "-." <> text id
+pprint (CFNeg x) = parens $ text "-." <> text x
 pprint (CFAdd i1 i2) = parens $ text i1 <+> text "+." <+> text i2
 pprint (CFSub i1 i2) = parens $ text i1 <+> text "-." <+> text i2
 pprint (CFMul i1 i2) = parens $ text i1 <+> text "*." <+> text i2
@@ -193,7 +193,7 @@ pprint (CLet (x, t) c1 c2) = sep [ hang (text "let" <+> text x <> char ':' <+> t
                                         4 (pprint c1)
                                  , text "in"
                                  ] $$ pprint c2
-pprint (CVar id) = text id
+pprint (CVar x) = text x
 pprint (CMkCls _ _ c) = pprint c
 pprint (CAppCls x args) = text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
@@ -204,7 +204,7 @@ pprint (CLetTuple xts i c) =
         ] $$ pprint c
 pprint (CGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (CPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
-pprint (CExtArray id) = char '#' <> parens (text id)
+pprint (CExtArray x) = char '#' <> parens (text x)
 
 
 pprintArgs :: [(Id, Ty)] -> Doc
@@ -216,13 +216,13 @@ pprintDecls :: M.Map Id FunDef -> Doc
 pprintDecls defs = iter (M.toList defs)
   where
     iter [] = empty
-    iter ((id, def) : rest) =
-      hang (text id <> char ':' <+> text (show $ ty def) <+> char '=')
+    iter ((x, def) : rest) =
+      hang (text x <> char ':' <+> text (show $ ty def) <+> char '=')
            4 (pprintFunDef def) $$ iter rest
 
 
 pprintFunDef :: FunDef -> Doc
-pprintFunDef (FunDef name ty fargs fdFvs body) =
+pprintFunDef (FunDef _ _ fargs fdFvs body) =
     hang (text "fn" <> parens (pprintArgs fargs)
                     <> brackets (pprintArgs fdFvs)
                     <+> char '=')
