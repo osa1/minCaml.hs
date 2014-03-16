@@ -207,4 +207,6 @@ flatten (KLet xt e1 e2) =
         insert (KLetTuple yts z e) = KLetTuple yts z (insert e)
         insert e = KLet xt e (flatten e2)
     in insert (flatten e1)
+flatten (KLetRec (KFunDef name args body) e) = KLetRec (KFunDef name args (flatten body)) (flatten e)
+flatten (KLetTuple xts y e) = KLetTuple xts y (flatten e)
 flatten e = e
