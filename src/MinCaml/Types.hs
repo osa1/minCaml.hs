@@ -58,7 +58,7 @@ data Ty
     | TyTuple [Ty]
     | TyArr Ty
     | TyVar TyVar
-    deriving (Show, Eq)
+    deriving (Show, Eq, Ord)
 
 deriving instance Data Ty
 deriving instance Typeable Ty
