@@ -55,7 +55,7 @@ data CC
 
 data Closure = Closure
     { entry :: Id
-    , cFvs  :: S.Set Id
+    , cFvs  :: S.Set (Id, Ty)
     } deriving (Show)
 
 data FunDef = FunDef
@@ -83,7 +83,7 @@ fvs (CIfEq i1 i2 c1 c2) = S.insert i1 $ S.insert i2 $ fvs c1 `S.union` fvs c2
 fvs (CIfLe i1 i2 c1 c2) = S.insert i1 $ S.insert i2 $ fvs c1 `S.union` fvs c2
 fvs (CLet (i, _) c1 c2) = fvs c1 `S.union` S.delete i (fvs c2)
 fvs (CVar i) = S.singleton i
-fvs (CMkCls (i, _) (Closure _ freevars) e) = S.delete i (freevars `S.union` fvs e)
+fvs (CMkCls (i, _) (Closure _ freevars) e) = S.delete i (S.map fst freevars `S.union` fvs e)
 fvs (CAppCls c ids) = S.fromList $ c : ids
 fvs (CAppDir _ ids) =
     -- here we deliberately ignore function name while generating free
@@ -154,7 +154,9 @@ cc env known k =
         if S.member x (fvs e2') then
           -- step 3: x is used in e2' as a variable(i.e. passed to some
           -- other function, returned etc.), return MkCls
-          return $ CMkCls (x, t) (Closure x e1'fvs') e2'
+          let addTys :: S.Set Id -> S.Set (Id, Ty)
+              addTys = S.map (\i -> (i, fromJust $ M.lookup i env))
+          in return $ CMkCls (x, t) (Closure x (addTys e1'fvs')) e2'
         else
           -- x is used in e2' as function part of application, we can use
           -- AppDir in this case, no need for closure conversion of e2'
@@ -200,8 +202,9 @@ pprint (CLet (x, t) c1 c2) = sep [ hang (text "let" <+> text x <> char ':' <+> t
 pprint (CVar x) = text x
 pprint (CMkCls _ (Closure entry fvs) c) =
     text "closure"
-    <> parens (sep $ punctuate (char ',') [text entry, text $ show fvs, pprint c])
-pprint (CAppCls x args) = text x <+> hsep (map text args)
+    <> parens (sep $ punctuate (char ',') [text entry, text $ show fvs])
+    $+$ pprint c
+pprint (CAppCls x args) = text "c#" <> text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
 pprint (CTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
 pprint (CLetTuple xts i c) =

@@ -99,25 +99,29 @@ pprintCStat (CVarDecl ty name val) =
          Nothing -> empty
          Just expr -> space <> equals <+> pprintCExpr expr
 pprintCStat (CAssign name value) = text name <+> equals <+> pprintCExpr value
-pprintCStat (CIf guard thenCase alts) =
-    text "if" <+> pprintAlt (guard, thenCase) <+> pprintElseIfs alts
+pprintCStat (CIf guard thenCase alts) = pprintCases (zip guards bodies)
   where
-    pprintElseIfs :: [(CExpr, [CStat])] -> Doc
-    pprintElseIfs [] = empty
-    pprintElseIfs ((guard, body) : rest) =
-      text "else if" <+> pprintAlt (guard, body) <+> pprintElseIfs rest
+    guards = guard : map fst alts
+    bodies = thenCase : map snd alts
 
-    pprintAlt :: (CExpr, [CStat]) -> Doc
-    pprintAlt (guard, body) =
-      parens (pprintCExpr guard) <+> lbrace
-      $$ nest 4 (pprintBlock body)
-      $$ rbrace
+    pprintCases ((g, b) : rest) =
+      text "if" <+> parens (pprintCExpr g) <+> lbrace $+$ nest 4 (pprintBlock' b)
+        $+$ rbrace <+> pprintCases' rest
+
+    pprintCases' [] = empty
+    pprintCases' ((g, b) : rest) =
+      text "else if" <+> parens (pprintCExpr g) <+> lbrace $+$ nest 2 (pprintBlock' b)
+        $+$ nest (-2) (rbrace <+> pprintCases' rest)
 pprintCStat (CFunCall fname args) = pprintFunCall fname args
 pprintCStat (CReturn expr) = text "return" <+> pprintCExpr expr
 
 
 pprintBlock :: [CStat] -> Doc
-pprintBlock block = lbrace $+$ nest 4 (vcat $ punctuate semi $ map pprintCStat block) <> semi $+$ rbrace
+pprintBlock block = lbrace $+$ nest 4 (vcat $ map pprintCStat block) $+$ rbrace
+
+
+pprintBlock' :: [CStat] -> Doc
+pprintBlock' block = vcat $ map pprintCStat block
 
 
 pprintCExpr :: CExpr -> Doc
@@ -161,14 +165,19 @@ main = do
 
 -------------------------------------------------------------------------------
 data CodegenState = CodegenState
-    { tupleTys   :: M.Map [Ty] (String, [(String, CType)])
-    , lastStruct :: Int
-    , closures   :: M.Map Id CC.FunDef
-    , freshVar   :: Int
+    { -- states used for generating structs for tuples
+      tupleTys    :: M.Map [Ty] (String, [(String, CType)])
+    , lastTStruct :: Int
+      -- states used for generating structs for closures
+    , closureTys  :: M.Map [Ty] (String, [(String, CType)])
+    , lastCStruct :: Int
+
+    , closures    :: M.Map Id CC.FunDef
+    , freshVar    :: Int
     } deriving (Show)
 
 initCodegenState :: M.Map Id CC.FunDef -> CodegenState
-initCodegenState closures = CodegenState M.empty 0 cls 0
+initCodegenState closures = CodegenState M.empty 0 M.empty 0 cls 0
   where
     cls = closures `M.union` builtins
     builtins = M.fromList
@@ -179,16 +188,16 @@ newtype Codegen a = Codegen { unwrapCodegen :: State CodegenState a }
     deriving (Functor, Applicative, MonadState CodegenState, Monad)
 
 
-getTupleType :: [Ty] -> Codegen CType
-getTupleType tys = do
+getTupleTy :: [Ty] -> Codegen CType
+getTupleTy tys = do
     st <- get
     let tuples = tupleTys st
     case M.lookup tys tuples of
       Nothing -> do
         tys' <- mapM genTy tys
-        let lastS = lastStruct st
+        let lastS = lastTStruct st
         let struct = mkStruct lastS tys'
-        put st{tupleTys=M.insert tys struct tuples, lastStruct=(lastS + 1)}
+        put st{tupleTys=M.insert tys struct tuples, lastTStruct=(lastS + 1)}
         return $ CStruct $ fst struct
       Just ty -> return $ CStruct $ fst ty
   where
@@ -209,9 +218,9 @@ test' = renderStyle (Style PageMode 90 0.9)
   where
     action :: Codegen ()
     action = do
-      _ <- getTupleType [TyUnit, TyBool, TyFloat]
-      _ <- getTupleType [TyUnit, TyBool]
-      _ <- getTupleType [TyUnit, TyBool, TyFloat]
+      _ <- getTupleTy [TyUnit, TyBool, TyFloat]
+      _ <- getTupleTy [TyUnit, TyBool]
+      _ <- getTupleTy [TyUnit, TyBool, TyFloat]
       return ()
 
 
@@ -220,7 +229,7 @@ genTy TyUnit = return CVoidPtr
 genTy TyBool = return CBool
 genTy TyInt = return CInt
 genTy TyFloat = return CFloat
-genTy (TyTuple tys) = getTupleType tys
+genTy (TyTuple tys) = getTupleTy tys
 genTy (TyArr ty) = CPtr <$> genTy ty
 genTy (TyFun argtys retty) = CFunPtr <$> genTy retty <*> mapM genTy argtys
 genTy (TyVar tyvar) = error $ "uninstantiated type variable in genTy: " ++ show tyvar
@@ -251,6 +260,9 @@ genCC asgn (CC.CFloat f) = do
 genCC asgn (CC.CAdd i1 i2) = do
     var <- getBinder asgn
     return [CAssign var (CArith (CVar i1) CPlus (CVar i2))]
+genCC asgn (CC.CSub i1 i2) = do
+    var <- getBinder asgn
+    return [CAssign var (CArith (CVar i1) CMinus (CVar i2))]
 genCC asgn (CC.CVar i) = do
     var <- getBinder asgn
     return [CAssign var (CVar i)]
@@ -272,7 +284,11 @@ genCC asgn (CC.CLet (i, t) c1 c2) = do
     declStat <- genCC (Just i) c1
     rest <- genCC asgn c2
     return (decl : declStat ++ rest)
-genCC asgn (CC.CMkCls _ _ rest) = genCC asgn rest
+
+genCC asgn (CC.CMkCls (fname, _) closure rest) = do
+    -- structName <- genCls closure
+    genCC asgn rest
+
 genCC asgn (CC.CAppCls fname args) = do
     cls <- gets closures
     case M.lookup fname cls of

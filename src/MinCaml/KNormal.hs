@@ -275,4 +275,3 @@ pprintFunDef (KFunDef (x, t) args body) =
                     <+> char '=')
          2 (pprint body)
 
-
