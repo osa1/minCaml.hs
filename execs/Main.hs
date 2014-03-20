@@ -9,6 +9,7 @@ import           Text.PrettyPrint.HughesPJ hiding (render)
 
 import qualified MinCaml.AlphaConv         as AC
 import qualified MinCaml.ClosureConv       as CC
+import qualified MinCaml.Codegen.C         as Codegen
 import qualified MinCaml.KNormal           as KN
 import           MinCaml.Parser
 import           MinCaml.Typing
@@ -50,3 +51,6 @@ main = do
                 render $ CC.pprintDecls defs
                 putStrLn ""
                 render $ CC.pprint c
+
+                putStrLn "\ncode generation -------------------------------------------------"
+                render $ Codegen.codegen defs c

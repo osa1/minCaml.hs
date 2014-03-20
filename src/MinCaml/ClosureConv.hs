@@ -11,6 +11,7 @@ module MinCaml.ClosureConv
   ) where
 
 
+-------------------------------------------------------------------------------
 import           Control.Applicative       hiding (empty)
 import           Control.Monad.State
 import qualified Data.Map                  as M
@@ -22,8 +23,10 @@ import           Text.PrettyPrint.HughesPJ
 import           MinCaml.KNormal           hiding (fvs, pprint)
 import           MinCaml.Types             hiding (FunDef)
 import           MinCaml.Typing            (init_env)
+-------------------------------------------------------------------------------
 
 
+-------------------------------------------------------------------------------
 data CC
     = CUnit
     | CInt Int
@@ -60,7 +63,7 @@ data FunDef = FunDef
     , ty    :: Ty
     , fargs :: [(Id, Ty)]
     , fdFvs :: [(Id, Ty)]
-    , body  :: CC
+    , body  :: Maybe CC
     } deriving (Show)
 
 
@@ -146,7 +149,7 @@ cc env known k =
         let e1'fvs' = S.delete x e1'fvs
             zts = map (\z -> (z, fromJust $ M.lookup z env')) (S.toList e1'fvs')
         -- add closure to top level declarations
-        modify (M.insert x (FunDef x t args zts e1_))
+        modify (M.insert x (FunDef x t args zts (Just e1_)))
         e2' <- cc env' known_ e2
         if S.member x (fvs e2') then
           -- step 3: x is used in e2' as a variable(i.e. passed to some
@@ -168,6 +171,7 @@ cc env known k =
       KExtFunApp x args -> return $ CAppDir ("min_caml_" ++ x) args
 
 
+-------------------------------------------------------------------------------
 -- | Pretty printer
 pprint :: CC -> Doc
 pprint CUnit = text "()"
@@ -226,4 +230,6 @@ pprintFunDef (FunDef _ _ fargs fdFvs body) =
     hang (text "fn" <> parens (pprintArgs fargs)
                     <> brackets (pprintArgs fdFvs)
                     <+> char '=')
-         2 (pprint body)
+         2 (case body of
+              Nothing -> text "<builtin>"
+              Just body' -> pprint body')
