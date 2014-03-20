@@ -198,7 +198,9 @@ pprint (CLet (x, t) c1 c2) = sep [ hang (text "let" <+> text x <> char ':' <+> t
                                  , text "in"
                                  ] $$ pprint c2
 pprint (CVar x) = text x
-pprint (CMkCls _ _ c) = pprint c
+pprint (CMkCls _ (Closure entry fvs) c) =
+    text "closure"
+    <> parens (sep $ punctuate (char ',') [text entry, text $ show fvs, pprint c])
 pprint (CAppCls x args) = text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
 pprint (CTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
