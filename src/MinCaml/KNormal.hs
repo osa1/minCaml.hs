@@ -5,16 +5,22 @@ module MinCaml.KNormal
   , KFunDef (..)
   , knormal
   , flatten
+  , pprint
+  , fvs
   ) where
 
 
+-------------------------------------------------------------------------------
 import           Control.Monad.State
-import qualified Data.Map            as M
-import qualified Data.Set            as S
+import qualified Data.Map                  as M
+import qualified Data.Set                  as S
+import           Text.PrettyPrint.HughesPJ
 
 import           MinCaml.Types
+-------------------------------------------------------------------------------
 
 
+-------------------------------------------------------------------------------
 data KNormal
     = KUnit
     | KInt Int
@@ -45,6 +51,8 @@ data KFunDef = KFunDef (Id, Ty) [(Id, Ty)] KNormal
     deriving (Show)
 
 
+-------------------------------------------------------------------------------
+-- | Free variables
 fvs :: KNormal -> S.Set Id
 fvs KUnit = S.empty
 fvs (KInt _) = S.empty
@@ -75,6 +83,7 @@ fvs (KExtFunApp _ is) = S.fromList is
 
 
 -------------------------------------------------------------------------------
+-- | K-normalization
 freshId :: State Int Id
 freshId = do
     i <- get
@@ -197,6 +206,7 @@ knormal' env (TPut e1 e2 e3) = do
     insertLet e1k $ \x -> insertLet e2k $ \y -> insertLet e3k $ \z -> return (KPut x y z, TyUnit)
 
 
+-------------------------------------------------------------------------------
 -- | Flatten let-bindings
 flatten :: KNormal -> KNormal
 flatten (KIfEq x y e1 e2) = KIfEq x y (flatten e1) (flatten e2)
@@ -210,3 +220,59 @@ flatten (KLet xt e1 e2) =
 flatten (KLetRec (KFunDef name args body) e) = KLetRec (KFunDef name args (flatten body)) (flatten e)
 flatten (KLetTuple xts y e) = KLetTuple xts y (flatten e)
 flatten e = e
+
+
+-------------------------------------------------------------------------------
+-- | Pretty printer
+pprint :: KNormal -> Doc
+pprint KUnit = text "()"
+pprint (KInt i) = int i
+pprint (KFloat f) = float f
+pprint (KNeg x) = parens $ char '-' <> text x
+pprint (KAdd i1 i2) = parens $ text i1 <+> char '+' <+> text i2
+pprint (KSub i1 i2) = parens $ text i1 <+> char '-' <+> text i2
+pprint (KFNeg x) = parens $ text "-." <> text x
+pprint (KFAdd i1 i2) = parens $ text i1 <+> text "+." <+> text i2
+pprint (KFSub i1 i2) = parens $ text i1 <+> text "-." <+> text i2
+pprint (KFMul i1 i2) = parens $ text i1 <+> text "*." <+> text i2
+pprint (KFDiv i1 i2) = parens $ text i1 <+> text "/." <+> text i2
+pprint (KIfEq i1 i2 k1 k2) = text "if" <+> text i1 <+> char '=' <+> text i2 <+> text "then"
+                               $$ nest 4 (pprint k1)
+                               $$ text "else"
+                               $$ nest 4 (pprint k2)
+pprint (KIfLe i1 i2 k1 k2) = text "if" <+> text i1 <+> char '<' <+> text i2 <+> text "then"
+                               $$ nest 4 (pprint k1)
+                               $$ text "else"
+                               $$ nest 4 (pprint k2)
+pprint (KLet (x, t) k1 k2) = sep [ hang (text "let" <+> text x <> char ':' <+> text (show t) <+> char '=')
+                                        4 (pprint k1)
+                                 , text "in"
+                                 ] $$ pprint k2
+pprint (KVar x) = text x
+pprint (KLetRec fundef k) = sep [ pprintFunDef fundef
+                                , text "in"
+                                ] $$ pprint k
+pprint (KApp x args) = text x <+> hsep (map text args)
+pprint (KTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
+pprint (KLetTuple xts i k) =
+    sep [ text "let" <+> parens (pprintArgs xts) <+> char '=' <+> text i
+        , text "in"
+        ] $$ pprint k
+pprint (KGet i1 i2) = parens (text i1) <> char '.' <> text i2
+pprint (KPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
+pprint (KExtArray x) = char '#' <> parens (text x)
+pprint (KExtFunApp x args) = char '#' <> text x <+> hsep (map text args)
+
+
+pprintArgs :: [(Id, Ty)] -> Doc
+pprintArgs = sep . punctuate (char ',') . map (\(x, t) -> text x <> text ": " <> text (show t))
+
+
+pprintFunDef :: KFunDef -> Doc
+pprintFunDef (KFunDef (x, t) args body) =
+    hang (text "let rec" <+> text x <> char ':' <+> text (show t)
+                    <+> parens (pprintArgs args)
+                    <+> char '=')
+         2 (pprint body)
+
+

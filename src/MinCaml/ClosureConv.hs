@@ -19,7 +19,7 @@ import qualified Data.Set                  as S
 import           Text.PrettyPrint.HughesPJ
 
 
-import           MinCaml.KNormal
+import           MinCaml.KNormal           hiding (fvs, pprint)
 import           MinCaml.Types             hiding (FunDef)
 import           MinCaml.Typing            (init_env)
 
