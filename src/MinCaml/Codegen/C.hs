@@ -46,7 +46,7 @@ data CExpr
     | CIntE Int | CFloatE Float
     deriving (Show)
 
-data CArithOp = CPlus | CMinus | CEqual | CLe
+data CArithOp = CPlus | CMinus | CMult | CEqual | CLe
     deriving (Show)
 
 
@@ -143,6 +143,7 @@ pprintCOp CPlus = char '+'
 pprintCOp CMinus = char '-'
 pprintCOp CEqual = text "=="
 pprintCOp CLe = text "<="
+pprintCOp CMult = char '*'
 
 
 pprintDecls :: [CDecl] -> Doc
@@ -266,6 +267,9 @@ genCC asgn (CC.CSub i1 i2) = do
 genCC asgn (CC.CVar i) = do
     var <- getBinder asgn
     return [CAssign var (CVar i)]
+genCC asgn (CC.CNeg i) = do
+    var <- getBinder asgn
+    return [CAssign var (CArith (CIntE (-1)) CMult (CVar i))]
 genCC asgn (CC.CIfEq i1 i2 c1 c2) = do
     c1' <- genCC asgn c1
     c2' <- genCC asgn c2
