@@ -90,15 +90,17 @@ pprintCType CVoidPtr = text "void*"
 pprintCStat :: CStat -> Doc
 pprintCStat (CVarDecl (CFunPtr retTy argTys) name val) =
     pprintCType retTy <> parens (char '*' <> text name) <> pprintTyList argTys
-    <> case val of
-         Nothing -> empty
-         Just expr -> space <> equals <+> pprintCExpr expr
+    <> (case val of
+          Nothing -> empty
+          Just expr -> space <> equals <+> pprintCExpr expr)
+    <> semi
 pprintCStat (CVarDecl ty name val) =
     pprintCType ty <+> text name
-    <> case val of
-         Nothing -> empty
-         Just expr -> space <> equals <+> pprintCExpr expr
-pprintCStat (CAssign name value) = text name <+> equals <+> pprintCExpr value
+    <> (case val of
+          Nothing -> empty
+          Just expr -> space <> equals <+> pprintCExpr expr)
+    <> semi
+pprintCStat (CAssign name value) = text name <+> equals <+> pprintCExpr value <> semi
 pprintCStat (CIf guard thenCase alts) = pprintCases (zip guards bodies)
   where
     guards = guard : map fst alts
@@ -112,8 +114,8 @@ pprintCStat (CIf guard thenCase alts) = pprintCases (zip guards bodies)
     pprintCases' ((g, b) : rest) =
       text "else if" <+> parens (pprintCExpr g) <+> lbrace $+$ nest 2 (pprintBlock' b)
         $+$ nest (-2) (rbrace <+> pprintCases' rest)
-pprintCStat (CFunCall fname args) = pprintFunCall fname args
-pprintCStat (CReturn expr) = text "return" <+> pprintCExpr expr
+pprintCStat (CFunCall fname args) = pprintFunCall fname args <> semi
+pprintCStat (CReturn expr) = text "return" <+> pprintCExpr expr <> semi
 
 
 pprintBlock :: [CStat] -> Doc
@@ -320,13 +322,25 @@ genFunDefs = mapM genFunDef
 
 genFunDef :: CC.FunDef -> Codegen CDecl
 genFunDef CC.FunDef{..} = do
-    retty <- genTy ty
+    retty <- genTy (getFunRetTy ty)
     argTys <- mapM genTy (map snd fargs)
     fdFvsTys <- mapM genTy (map snd fdFvs)
-    let retName = "var_cg$funret"
     body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
     return $ CFunDecl retty name (zip argTys (map fst fargs) ++ zip fdFvsTys (map fst fdFvs))
-                      (fmap (++ [CReturn (CVar retName)]) body')
+                      (addRetStat retty body')
+  where
+    getFunRetTy :: Ty -> Ty
+    getFunRetTy (TyFun _ retty) = retty
+    getFunRetTy ty = error $ "panic: functions has non-function type " ++ show ty
+
+    retName = "var_cg$funret"
+
+    funret :: CType -> CStat
+    funret retty = CVarDecl retty retName Nothing
+
+    addRetStat :: CType -> Maybe [CStat] -> Maybe [CStat]
+    addRetStat _ Nothing = Nothing
+    addRetStat retty (Just b) = Just $ funret retty : b ++ [CReturn (CVar retName)]
 
 
 -------------------------------------------------------------------------------
