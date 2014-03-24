@@ -46,7 +46,7 @@ data CC
     | CLet (Id, Ty) CC CC
     | CVar Id
     | CMkCls (Id, Ty) Closure CC
-    | CAppCls Id [Id]
+    | CAppCls Id Ty [Id]
     | CAppDir Id [Id]
     | CTuple [(Id, Ty)]
     | CLetTuple [(Id, Ty)] Id CC
@@ -86,7 +86,7 @@ fvs (CIfLe i1 i2 c1 c2) = S.insert i1 $ S.insert i2 $ fvs c1 `S.union` fvs c2
 fvs (CLet (i, _) c1 c2) = fvs c1 `S.union` S.delete i (fvs c2)
 fvs (CVar i) = S.singleton i
 fvs (CMkCls (i, _) (Closure _ freevars) e) = S.delete i (M.keysSet freevars `S.union` fvs e)
-fvs (CAppCls c ids) = S.fromList $ c : ids
+fvs (CAppCls c _ ids) = S.fromList $ c : ids
 fvs (CAppDir _ ids) =
     -- here we deliberately ignore function name while generating free
     -- variables, see comments in `cc`.
@@ -164,9 +164,9 @@ cc env known k =
           -- AppDir in this case, no need for closure conversion of e2'
           return e2'
 
-      KApp x args
+      KApp x fty args
         | S.member x known -> return $ CAppDir x args
-        | otherwise -> return $ CAppCls x args
+        | otherwise -> return $ CAppCls x fty args
       KTuple xs -> return $ CTuple xs
       KLetTuple xs b e -> CLetTuple xs b <$> cc (M.fromList xs `M.union` env) known e
       KGet x y -> return $ CGet x y
@@ -206,7 +206,7 @@ pprint (CMkCls _ (Closure entry fvs) c) =
     text "closure"
     <> parens (sep $ punctuate (char ',') [text entry, text $ show fvs])
     $+$ pprint c
-pprint (CAppCls x args) = text "c#" <> text x <+> hsep (map text args)
+pprint (CAppCls x _ args) = text "c#" <> text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
 pprint (CTuple idtys) = parens $ hcat $
     punctuate (text ", ") (map (\(i, t) -> text i <> char ':' <+> text (show t)) idtys)

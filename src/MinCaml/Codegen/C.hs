@@ -236,8 +236,8 @@ getClosureStructName funty = do
 
 
 getEnvStructName
-    :: [(Id, Ty)]           -- ^ free variables and their types
-    -> Codegen String       -- ^ struct name for environment
+    :: [(Id, Ty)]               -- ^ free variables and their types
+    -> Codegen String           -- ^ struct name for environment
 getEnvStructName fvs = do
     st <- gets envTys
     case M.lookup fvs st of
@@ -358,8 +358,13 @@ genCC asgn (CC.CMkCls (var, ty) (CC.Closure entry fvs) rest) = do
         funStruct = CVarDecl (CTypeName clsname) var (Just $ CStructE [CVar $ var ++ "_fun" ,CVar envvar])
     rest' <- genCC asgn rest
     return $ envStruct : funStruct : rest'
-
-genCC asgn (CC.CAppCls fname args) = genCC asgn (CC.CAppDir fname args)
+genCC asgn (CC.CAppCls cname fty args) = do
+    clsname <- getClosureStructName fty
+    let as = map CVar args ++ [CSelect (CVar cname) (clsname ++ "_env")]
+        appl = CSelect (CVar cname) (clsname ++ "_fun")
+    return $ case asgn of
+               Nothing -> [CFunCall appl as]
+               Just aid -> [CAssign aid (CFunCallE appl as)]
 
 genCC asgn (CC.CAppDir fname args) = do
     let as = map CVar args
