@@ -153,7 +153,7 @@ freshVar :: State ParserState Id
 freshVar = do
     s@ParserState{freshId_=freshId} <- get
     put s{freshId_ = freshId + 1}
-    return $ "var_p$" ++ show freshId
+    return $ "var_p" ++ show freshId
 
 
 parseError :: [TokPos] -> a

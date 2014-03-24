@@ -113,7 +113,7 @@ ident (posn,_,_,s) len = Alex $ \s@AlexState{alex_ust=var} ->
                 -- I don't want to share any state between lexer and parser, so
                 -- var_l$ prefix is used for fresh variables generated in lexing stage
                 -- and var_p$ prefix is used for ones generated in parsing stage.
-                "_"            -> (var+1, Ident $ "var_l$" ++ show var)
+                "_"            -> (var+1, Ident $ "var_l" ++ show var)
                 ident'         -> (var, Ident ident')
 
 

@@ -19,7 +19,7 @@ freshId :: State Int Id
 freshId = do
     i <- get
     put (i + 1)
-    return $ "var_a$" ++ show i
+    return $ "var_a" ++ show i
 
 
 alphaConv' :: M.Map Id Id -> KNormal -> State Int KNormal

@@ -295,7 +295,7 @@ getBinder Nothing = do
     st <- get
     let ret = freshVar st
     put st{freshVar=ret+1}
-    return ("var_cg$" ++ show ret)
+    return ("var_cg" ++ show ret)
 
 
 genCC
@@ -420,7 +420,7 @@ genFunDef CC.FunDef{..}
     getFunRetTy (TyFun _ retty) = retty
     getFunRetTy ty = error $ "panic: function has non-function type " ++ show ty
 
-    retName = "var_cg$funret"
+    retName = "var_cgfunret"
 
     funret :: CType -> CStat
     funret retty = CVarDecl retty retName Nothing

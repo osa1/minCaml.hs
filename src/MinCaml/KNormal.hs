@@ -88,7 +88,7 @@ freshId :: State Int Id
 freshId = do
     i <- get
     put (i + 1)
-    return $ "var_k$" ++ show i
+    return $ "var_k" ++ show i
 
 
 insertLet :: (KNormal, Ty) -> (Id -> State Int (KNormal, Ty)) -> State Int (KNormal, Ty)
