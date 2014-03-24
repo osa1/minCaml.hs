@@ -49,6 +49,7 @@ data CExpr
     | CIntE Int | CFloatE Float
     | CSelect CExpr String
     | CStructE [CExpr]
+    | CGetAddr CExpr
     deriving (Show)
 
 data CArithOp = CPlus | CMinus | CMult | CEqual | CLe
@@ -73,6 +74,9 @@ pprintCDecl (CStrDecl name fields) =
     $$ rbrace <+> text name <> semi
   where
     pprintFields = vcat . map pprintField
+
+    pprintField (fieldName, CFunPtr retty argtys) =
+      pprintCType retty <+> parens (char '*' <> text fieldName) <> pprintTyList argtys <> semi
     pprintField (fieldName, fieldTy) = pprintCType fieldTy <+> text fieldName <> semi
 
 
@@ -141,6 +145,7 @@ pprintCExpr (CIntE i) = int i
 pprintCExpr (CFloatE f) = float f
 pprintCExpr (CSelect e s) = parens (pprintCExpr e) <> char '.' <> text s
 pprintCExpr (CStructE es) = braces (sep $ punctuate comma $ map pprintCExpr es)
+pprintCExpr (CGetAddr e) = char '&' <> parens (pprintCExpr e)
 
 
 pprintFunCall :: CExpr -> [CExpr] -> Doc
@@ -176,24 +181,25 @@ main =
 -------------------------------------------------------------------------------
 data CodegenState = CodegenState
     { -- states used for generating structs for tuples
-      tupleTys      :: M.Map [Ty] (String, [(String, CType)])
-    , lastTStruct   :: Int
+      tupleTys       :: M.Map [Ty] (String, [(String, CType)])
+    , lastTStruct    :: Int
 
       -- states used for generating structs for closures and closure envs
-    , closureTys    :: M.Map Ty String
-    , envTys        :: M.Map [(Id, Ty)] String
-    , lastClosureTy :: Int
-    , lastEnvTy     :: Int
+    , closureTys     :: M.Map Ty Id
+    , envTys         :: M.Map [(Id, Ty)] Id
+    , lastClosureTy  :: Int
+    , lastEnvTy      :: Int
+    , closureStructs :: M.Map Id [(Id, CType)]
+    , envStructs     :: M.Map Id [(Id, CType)]
 
-    , freshVar      :: Int
+    , freshVar       :: Int
     } deriving (Show)
 
-initCodegenState :: M.Map Id CC.FunDef -> CodegenState
-initCodegenState closures = CodegenState M.empty 0 M.empty M.empty 0 0 0
+initCodegenState :: CodegenState
+initCodegenState = CodegenState M.empty 0 M.empty M.empty 0 0 M.empty M.empty 0
   where
-    cls = closures `M.union` builtins
     builtins = M.fromList
-      [ ("print_int", CC.FunDef "print_int" (TyFun [TyInt] TyUnit) [("i", TyInt)] M.empty Nothing) ]
+      [ ("print_int", CC.FunDef "print_int" (TyFun [TyInt] TyUnit) [("i", TyInt)] M.empty False Nothing) ]
 
 
 newtype Codegen a = Codegen { unwrapCodegen :: State CodegenState a }
@@ -222,15 +228,18 @@ getTupleStructName tys = do
 
 getClosureStructName
     :: Ty                       -- ^ closure function type
-    -> Codegen String           -- ^ struct name for closure
+    -> Codegen Id               -- ^ struct name for closure
 getClosureStructName funty = do
     st <- gets closureTys
+    CFunPtr retty argtys <- genTy funty
+    let argtys' = argtys ++ [CVoidPtr]
     case M.lookup funty st of
       Nothing -> do
         cty <- gets lastClosureTy
         let cname = "closure" ++ show cty
         modify $ \s -> s{lastClosureTy = cty + 1, closureTys = M.insert funty cname st}
-        -- TODO: generate struct code
+        let struct = [(cname ++ "_fun", CFunPtr retty argtys'), (cname ++ "_env", CVoidPtr)]
+        modify $ \s -> s{closureStructs = M.insert cname struct (closureStructs s)}
         return cname
       Just n -> return n
 
@@ -240,12 +249,14 @@ getEnvStructName
     -> Codegen String           -- ^ struct name for environment
 getEnvStructName fvs = do
     st <- gets envTys
+    fvs' <- mapM (\(i, t) -> (,) i <$> genTy t) fvs
     case M.lookup fvs st of
       Nothing -> do
         ety <- gets lastEnvTy
         let envname = "env" ++ show ety
         modify $ \s -> s{lastEnvTy = ety + 1, envTys = M.insert fvs envname st}
-        -- TODO: generate struct code
+        let struct = map (\(i, t) -> (envname ++ "_" ++ i, t)) fvs'
+        modify $ \s -> s{envStructs = M.insert envname struct (envStructs s)}
         return envname
       Just n -> return n
 
@@ -256,7 +267,7 @@ test' = renderStyle (Style PageMode 90 0.9)
           $ map (uncurry CStrDecl)
           $ M.elems
           $ tupleTys
-          $ execState (unwrapCodegen action) (initCodegenState M.empty)
+          $ execState (unwrapCodegen action) initCodegenState
   where
     action :: Codegen ()
     action = do
@@ -355,7 +366,8 @@ genCC asgn (CC.CMkCls (var, ty) (CC.Closure entry fvs) rest) = do
     envname <- getEnvStructName (M.toList fvs)
     envvar <- getBinder Nothing
     let envStruct = CVarDecl (CTypeName envname) envvar (Just $ CStructE $ map (CVar . fst) $ M.toList fvs)
-        funStruct = CVarDecl (CTypeName clsname) var (Just $ CStructE [CVar $ var ++ "_fun" ,CVar envvar])
+        funStruct = CVarDecl (CTypeName clsname) var (Just $ CStructE [CVar $ var ++ "_fun"
+                                                                      ,CGetAddr $ CVar envvar])
     rest' <- genCC asgn rest
     return $ envStruct : funStruct : rest'
 genCC asgn (CC.CAppCls cname fty args) = do
@@ -379,20 +391,30 @@ genFunDefs = mapM genFunDef
 
 
 genFunDef :: CC.FunDef -> Codegen CDecl
-genFunDef CC.FunDef{..} = do
-    retty <- do
+genFunDef CC.FunDef{..}
+  | closure = do
+      retty <- retTy
+      argTys <- mapM (genTy . snd) fargs
+      envTy <- getEnvStructName (M.toList fdFvs)
+      body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
+      return $ CFunDecl retty name (zip argTys (map fst fargs) ++ [(CPtr (CTypeName envTy), name ++ "_env")])
+                        (addRetStat retty body')
+  | otherwise = do
+      retty <- retTy
+      argTys <- mapM (genTy . snd) fargs
+      body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
+      return $ CFunDecl retty name (zip argTys (map fst fargs))
+                        (addRetStat retty body')
+  where
+    retTy :: Codegen CType
+    retTy = do
       let rt = getFunRetTy ty
       if isFunTy rt then do
         closureName <- getClosureStructName rt
         return $ CTypeName closureName
       else
         genTy rt
-    argTys <- mapM (genTy . snd) fargs
-    fdFvsTys <- mapM (genTy . snd) (M.toList fdFvs)
-    body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
-    return $ CFunDecl retty name (zip argTys (map fst fargs) ++ zip fdFvsTys (M.keys fdFvs))
-                      (addRetStat retty body')
-  where
+
     getFunRetTy :: Ty -> Ty
     getFunRetTy (TyFun _ retty) = retty
     getFunRetTy ty = error $ "panic: function has non-function type " ++ show ty
@@ -408,16 +430,23 @@ genFunDef CC.FunDef{..} = do
 
 
 -------------------------------------------------------------------------------
-codegen :: M.Map Id CC.FunDef -> CC.CC -> Doc
-codegen fundefs code =
-    let (defs, c) =
-          evalState (unwrapCodegen ((,) <$> genFunDefs (M.elems fundefs)
-                                        <*> genCC Nothing code))
-                    (initCodegenState fundefs)
-    in pprintDecls defs
-       $$ empty
-       $$ mkMain (pprintBlock c)
+codegen' :: M.Map Id CC.FunDef -> CC.CC -> Codegen Doc
+codegen' funs code = do
+    code' <- genCC Nothing code
+    funs' <- genFunDefs (M.elems funs)
+    clsStructs <- M.toList <$> gets closureStructs
+    envStructs <- M.toList <$> gets envStructs
+    let structs = map (uncurry CStrDecl) $ clsStructs ++ envStructs
+    return $ pprintDecls structs
+             $$ text ""
+             $$ pprintDecls funs'
+             $$ text ""
+             $$ mkMain (pprintBlock code')
   where
     mkMain c = text "int" <+> text "main" <> parens empty $+$ c
+
+
+codegen :: M.Map Id CC.FunDef -> CC.CC -> Doc
+codegen funs code = evalState (unwrapCodegen $ codegen' funs code) initCodegenState
 
 

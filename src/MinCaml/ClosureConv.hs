@@ -24,7 +24,7 @@ import           MinCaml.KNormal           hiding (fvs, pprint)
 import           MinCaml.Types             hiding (FunDef)
 import           MinCaml.Typing            (init_env)
 
-import Debug.Trace
+import           Debug.Trace
 -------------------------------------------------------------------------------
 
 
@@ -61,11 +61,12 @@ data Closure = Closure
     } deriving (Show)
 
 data FunDef = FunDef
-    { name  :: Id
-    , ty    :: Ty
-    , fargs :: [(Id, Ty)]
-    , fdFvs :: M.Map Id Ty
-    , body  :: Maybe CC
+    { name    :: Id
+    , ty      :: Ty
+    , fargs   :: [(Id, Ty)]
+    , fdFvs   :: M.Map Id Ty
+    , closure :: Bool
+    , body    :: Maybe CC
     } deriving (Show)
 
 
@@ -139,19 +140,22 @@ cc env known k =
         e1' <- cc env' known' e1
         let e1'fvs = fvs e1' `S.difference` S.fromList (map fst args)
         -- now in order our assumption to hold, e1'fvs should be empty
-        (known_, e1_) <- if S.null e1'fvs then
-                           return (known', e1')
-                         else do
-                           -- step 2: assumption did not hold, closure convert
-                           -- e1' without having x as known closed function
-                           put toplevel_backup
-                           e1_ <- cc env' known e1
-                           return (known, e1_)
+        (known_, e1_, closure) <-
+          if S.null e1'fvs then
+            return (known', e1', False)
+          else do
+            -- step 2: assumption did not hold, closure convert
+            -- e1' without having x as known closed function
+            put toplevel_backup
+            e1_ <- cc env' known e1
+            return (known, e1_, True)
 
         let e1'fvs' = S.delete x e1'fvs
             zts = M.fromList $ map (\z -> (z, fromJust $ M.lookup z env')) (S.toList e1'fvs')
         -- add function part of the closure to top level declarations
-        modify (M.insert x (FunDef (x ++ "_fun") t args zts (Just e1_)))
+        let declName = if closure then x ++ "_fun" else x
+        modify (M.insert x (FunDef declName t args zts closure (Just e1_)))
+
         e2' <- cc env' known_ e2
         if S.member x (fvs e2') then
           -- step 3: x is used in e2' as a variable(i.e. passed to some
@@ -234,9 +238,10 @@ pprintDecls defs = iter (M.toList defs)
 
 
 pprintFunDef :: FunDef -> Doc
-pprintFunDef (FunDef _ _ fargs fdFvs body) =
+pprintFunDef (FunDef _ _ fargs fdFvs closure body) =
     hang (text "fn" <> parens (pprintArgs fargs)
                     <> brackets (pprintArgs $ M.toList fdFvs)
+                    <+> if closure then text "<closure>" else empty
                     <+> char '=')
          2 (case body of
               Nothing -> text "<builtin>"
