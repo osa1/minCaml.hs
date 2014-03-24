@@ -58,11 +58,12 @@ data CArithOp = CPlus | CMinus | CMult | CEqual | CLe
 
 pprintCDecl :: CDecl -> Doc
 pprintCDecl (CFunDecl ty fname args body) =
-    pprintCType ty <+> text fname <> parens (pprintArgs args)
-    $+$ case body of
-          Nothing -> empty
-          Just body' -> pprintBlock body'
+    addBody (pprintCType ty <+> text fname <> parens (pprintArgs args))
   where
+    addBody header = case body of
+                       Nothing -> header <> char ';'
+                       Just body' -> header $+$ pprintBlock body'
+
     pprintArgs = sep . punctuate comma . map pprintArg
 
     pprintArg (CFunPtr ret argTys, vname) =
@@ -434,16 +435,24 @@ codegen' :: M.Map Id CC.FunDef -> CC.CC -> Codegen Doc
 codegen' funs code = do
     code' <- genCC Nothing code
     funs' <- genFunDefs (M.elems funs)
+    let funDecls = collectFunDecls funs'
     clsStructs <- M.toList <$> gets closureStructs
     envStructs <- M.toList <$> gets envStructs
     let structs = map (uncurry CStrDecl) $ clsStructs ++ envStructs
-    return $ pprintDecls structs
-             $$ text ""
-             $$ pprintDecls funs'
-             $$ text ""
-             $$ mkMain (pprintBlock code')
+    return $ vcat $ intersperse (text "")
+      [ pprintDecls structs
+      , pprintDecls funDecls
+      , pprintDecls funs'
+      , mkMain (pprintBlock code')
+      ]
   where
     mkMain c = text "int" <+> text "main" <> parens empty $+$ c
+
+    collectFunDecls :: [CDecl] -> [CDecl]
+    collectFunDecls [] = []
+    collectFunDecls (CFunDecl retty name argtys _ : rest) =
+      CFunDecl retty name argtys Nothing : collectFunDecls rest
+    collectFunDecls (_ : rest) = collectFunDecls rest
 
 
 codegen :: M.Map Id CC.FunDef -> CC.CC -> Doc
