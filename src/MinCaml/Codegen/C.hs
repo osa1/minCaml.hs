@@ -202,7 +202,7 @@ getTupleStructName tys = do
         tys' <- mapM genTy tys
         let lastS = lastTStruct st
         let struct = mkStruct lastS tys'
-        put st{tupleTys=M.insert tys struct tuples, lastTStruct=(lastS + 1)}
+        put st{tupleTys=M.insert tys struct tuples, lastTStruct=lastS + 1}
         return $ fst struct
       Just struct -> return $ fst struct
   where
@@ -328,8 +328,8 @@ genFunDefs = mapM genFunDef
 genFunDef :: CC.FunDef -> Codegen CDecl
 genFunDef CC.FunDef{..} = do
     retty <- genTy (getFunRetTy ty)
-    argTys <- mapM genTy (map snd fargs)
-    fdFvsTys <- mapM genTy (map snd fdFvs)
+    argTys <- mapM (genTy . snd) fargs
+    fdFvsTys <- mapM (genTy . snd) fdFvs
     body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
     return $ CFunDecl retty name (zip argTys (map fst fargs) ++ zip fdFvsTys (map fst fdFvs))
                       (addRetStat retty body')
@@ -357,7 +357,7 @@ codegen fundefs code =
                     (initCodegenState fundefs)
     in pprintDecls defs
        $$ empty
-       $$ (mkMain $ pprintBlock c)
+       $$ mkMain (pprintBlock c)
   where
     mkMain c = text "int" <+> text "main" <> parens empty $+$ c
 
