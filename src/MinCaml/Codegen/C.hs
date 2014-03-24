@@ -12,6 +12,8 @@ import           Text.PrettyPrint.HughesPJ
 
 import qualified MinCaml.ClosureConv       as CC
 import           MinCaml.Types             (Id, Ty (..))
+
+import Debug.Trace
 -------------------------------------------------------------------------------
 
 
@@ -28,13 +30,13 @@ data CDecl
 data CType
     = CInt | CFloat | CBool | CPtr CType | CVoidPtr | CFunPtr CType [CType]
     | CTypeName String | CStruct String
-    deriving (Show)
+    deriving (Show, Eq, Ord)
 
 data CStat
     = CVarDecl CType String (Maybe CExpr)
     | CAssign String CExpr
     | CIf CExpr [CStat] [(CExpr, [CStat])]
-    | CFunCall String [CExpr]
+    | CFunCall CExpr [CExpr]
     | CReturn CExpr
     deriving (Show)
 
@@ -42,8 +44,10 @@ data CExpr
     = CVar String
     | CTrue | CFalse
     | CArith CExpr CArithOp CExpr
-    | CFunCallE String [CExpr]
+    | CFunCallE CExpr [CExpr]
     | CIntE Int | CFloatE Float
+    | CSelect CExpr String
+    | CStructE [CExpr]
     deriving (Show)
 
 data CArithOp = CPlus | CMinus | CMult | CEqual | CLe
@@ -114,7 +118,7 @@ pprintCStat (CIf guard thenCase alts) = pprintCases (zip guards bodies)
     pprintCases' ((g, b) : rest) =
       text "else if" <+> parens (pprintCExpr g) <+> lbrace $+$ nest 2 (pprintBlock' b)
         $+$ nest (-2) (rbrace <+> pprintCases' rest)
-pprintCStat (CFunCall fname args) = pprintFunCall fname args <> semi
+pprintCStat (CFunCall fn args) = pprintFunCall fn args <> semi
 pprintCStat (CReturn expr) = text "return" <+> pprintCExpr expr <> semi
 
 
@@ -131,13 +135,15 @@ pprintCExpr (CVar var) = text var
 pprintCExpr (CArith e1 op e2) = parens $ pprintCExpr e1 <+> pprintCOp op <+> pprintCExpr e2
 pprintCExpr CTrue = text "true"
 pprintCExpr CFalse = text "false"
-pprintCExpr (CFunCallE fname args) = pprintFunCall fname args
+pprintCExpr (CFunCallE fn args) = pprintFunCall fn args
 pprintCExpr (CIntE i) = int i
 pprintCExpr (CFloatE f) = float f
+pprintCExpr (CSelect e s) = parens (pprintCExpr e) <> char '.' <> text s
+pprintCExpr (CStructE es) = braces (sep $ punctuate comma $ map pprintCExpr es)
 
 
-pprintFunCall :: String -> [CExpr] -> Doc
-pprintFunCall fname args = text fname <> parens (sep $ punctuate comma $  map pprintCExpr args)
+pprintFunCall :: CExpr -> [CExpr] -> Doc
+pprintFunCall fn args = parens (pprintCExpr fn) <> parens (sep $ punctuate comma $ map pprintCExpr args)
 
 
 pprintCOp :: CArithOp -> Doc
@@ -169,18 +175,14 @@ main = do
 -------------------------------------------------------------------------------
 data CodegenState = CodegenState
     { -- states used for generating structs for tuples
-      tupleTys    :: M.Map [Ty] (String, [(String, CType)])
-    , lastTStruct :: Int
-      -- states used for generating structs for closures
-    , closureTys  :: M.Map [Ty] (String, [(String, CType)])
-    , lastCStruct :: Int
+      tupleTys            :: M.Map [Ty] (String, [(String, CType)])
+    , lastTStruct         :: Int
 
-    , closures    :: M.Map Id CC.FunDef
-    , freshVar    :: Int
+    , freshVar            :: Int
     } deriving (Show)
 
 initCodegenState :: M.Map Id CC.FunDef -> CodegenState
-initCodegenState closures = CodegenState M.empty 0 M.empty 0 cls 0
+initCodegenState closures = CodegenState M.empty 0 0
   where
     cls = closures `M.union` builtins
     builtins = M.fromList
@@ -191,8 +193,8 @@ newtype Codegen a = Codegen { unwrapCodegen :: State CodegenState a }
     deriving (Functor, Applicative, MonadState CodegenState, Monad)
 
 
-getTupleTy :: [Ty] -> Codegen CType
-getTupleTy tys = do
+getTupleStructName :: [Ty] -> Codegen String
+getTupleStructName tys = do
     st <- get
     let tuples = tupleTys st
     case M.lookup tys tuples of
@@ -201,8 +203,8 @@ getTupleTy tys = do
         let lastS = lastTStruct st
         let struct = mkStruct lastS tys'
         put st{tupleTys=M.insert tys struct tuples, lastTStruct=(lastS + 1)}
-        return $ CStruct $ fst struct
-      Just ty -> return $ CStruct $ fst ty
+        return $ fst struct
+      Just struct -> return $ fst struct
   where
     mkStruct :: Int -> [CType] -> (String, [(String, CType)])
     mkStruct i tys =
@@ -221,9 +223,9 @@ test' = renderStyle (Style PageMode 90 0.9)
   where
     action :: Codegen ()
     action = do
-      _ <- getTupleTy [TyUnit, TyBool, TyFloat]
-      _ <- getTupleTy [TyUnit, TyBool]
-      _ <- getTupleTy [TyUnit, TyBool, TyFloat]
+      _ <- getTupleStructName [TyUnit, TyBool, TyFloat]
+      _ <- getTupleStructName [TyUnit, TyBool]
+      _ <- getTupleStructName [TyUnit, TyBool, TyFloat]
       return ()
 
 
@@ -232,7 +234,7 @@ genTy TyUnit = return CVoidPtr
 genTy TyBool = return CBool
 genTy TyInt = return CInt
 genTy TyFloat = return CFloat
-genTy (TyTuple tys) = getTupleTy tys
+genTy (TyTuple tys) = CTypeName <$> getTupleStructName tys
 genTy (TyArr ty) = CPtr <$> genTy ty
 genTy (TyFun argtys retty) = CFunPtr <$> genTy retty <*> mapM genTy argtys
 genTy (TyVar tyvar) = error $ "uninstantiated type variable in genTy: " ++ show tyvar
@@ -291,28 +293,31 @@ genCC asgn (CC.CLet (i, t) c1 c2) = do
     rest <- genCC asgn c2
     return (decl : declStat ++ rest)
 
-genCC asgn (CC.CMkCls (fname, _) closure rest) = do
-    -- structName <- genCls closure
-    genCC asgn rest
+-- Compiling tuples
+genCC asgn (CC.CTuple idtys) = do
+    let tys = map snd idtys
+        ids = map fst idtys
+    structName <- getTupleStructName tys
+    var <- getBinder asgn
+    return [CAssign var $ CStructE $ map CVar ids]
+genCC asgn (CC.CLetTuple binders i c) = do
+    structName <- getTupleStructName (map snd binders)
+    binderTys <- mapM (genTy . snd) binders
+    let binderIds = map fst binders
+        binds = map (\(fi, bi, t) -> CVarDecl t bi (Just $ CSelect (CVar i) (structName ++ "field" ++ show fi)))
+                    (zip3 [1..] binderIds binderTys)
+    rest <- genCC asgn c
+    return $ binds ++ rest
 
-genCC asgn (CC.CAppCls fname args) = do
-    cls <- gets closures
-    case M.lookup fname cls of
-      Nothing -> do
-        let as = map CVar args
-        return $ case asgn of
-                   Nothing -> [CFunCall fname as]
-                   Just aid -> [CAssign aid (CFunCallE fname as)]
-      Just CC.FunDef{..} -> do
-        let as = map CVar $ args ++ map fst fdFvs
-        return $ case asgn of
-                   Nothing -> [CFunCall name as]
-                   Just aid -> [CAssign aid (CFunCallE name as)]
+-- Compiling closures and closure applications
+{-genCC asgn (CC.CMkCls (fname, fty) closure rest) = undefined
+genCC asgn (CC.CAppCls fname args) = undefined-}
+
 genCC asgn (CC.CAppDir fname args) = do
     let as = map CVar args
     return $ case asgn of
-               Nothing -> [CFunCall fname as]
-               Just aid -> [CAssign aid (CFunCallE fname as)]
+               Nothing -> [CFunCall (CVar fname) as]
+               Just aid -> [CAssign aid (CFunCallE (CVar fname) as)]
 genCC _ cc = error $ "not implemented yet: genCC " ++ show cc
 
 

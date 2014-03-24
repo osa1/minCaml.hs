@@ -39,7 +39,7 @@ data KNormal
     | KVar Id
     | KLetRec KFunDef KNormal
     | KApp Id [Id]
-    | KTuple [Id]
+    | KTuple [(Id, Ty)]
     | KLetTuple [(Id, Ty)] Id KNormal
     | KGet Id Id
     | KPut Id Id Id
@@ -74,7 +74,7 @@ fvs (KLetRec (KFunDef (i, _) args k1) k2) =
         k2fvs = S.delete i $ fvs k2
     in k1fvs `S.union` k2fvs
 fvs (KApp i is) = S.insert i $ S.fromList is
-fvs (KTuple is) = S.fromList is
+fvs (KTuple is) = S.fromList $ map fst is
 fvs (KLetTuple is i k) = S.insert i $ fvs k `S.difference` S.fromList (map fst is)
 fvs (KGet i1 i2) = S.fromList [i1, i2]
 fvs (KPut i1 i2 i3) = S.fromList [i1, i2, i3]
@@ -178,7 +178,10 @@ knormal' env (TApp f es) = do
       bind [] es
 knormal' env (TTuple es) = do
     let collectIdTys :: [Id] -> [Ty] -> [Tm] -> State Int (KNormal, Ty)
-        collectIdTys is tys [] = return (KTuple $ reverse is, TyTuple $ reverse tys)
+        collectIdTys is tys [] =
+          let tys' = reverse tys
+              is' = reverse is
+          in return (KTuple (zip is' tys'), TyTuple tys')
         collectIdTys is tys (t : ts) = do
           tk@(_, ty) <- knormal' env t
           insertLet tk $ \i -> collectIdTys (i : is) (ty : tys) ts
@@ -253,7 +256,8 @@ pprint (KLetRec fundef k) = sep [ pprintFunDef fundef
                                 , text "in"
                                 ] $$ pprint k
 pprint (KApp x args) = text x <+> hsep (map text args)
-pprint (KTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
+pprint (KTuple idtys) = parens $ hcat $
+    punctuate (text ", ") (map (\(i, t) -> text i <+> char ':' <+> text (show t)) idtys)
 pprint (KLetTuple xts i k) =
     sep [ text "let" <+> parens (pprintArgs xts) <+> char '=' <+> text i
         , text "in"

@@ -23,6 +23,8 @@ import           Text.PrettyPrint.HughesPJ
 import           MinCaml.KNormal           hiding (fvs, pprint)
 import           MinCaml.Types             hiding (FunDef)
 import           MinCaml.Typing            (init_env)
+
+import Debug.Trace
 -------------------------------------------------------------------------------
 
 
@@ -46,7 +48,7 @@ data CC
     | CMkCls (Id, Ty) Closure CC
     | CAppCls Id [Id]
     | CAppDir Id [Id]
-    | CTuple [Id]
+    | CTuple [(Id, Ty)]
     | CLetTuple [(Id, Ty)] Id CC
     | CGet Id Id
     | CPut Id Id Id
@@ -89,7 +91,7 @@ fvs (CAppDir _ ids) =
     -- here we deliberately ignore function name while generating free
     -- variables, see comments in `cc`.
     S.fromList ids
-fvs (CTuple is) = S.fromList is
+fvs (CTuple is) = S.fromList $ map fst is
 fvs (CLetTuple is i c) = S.insert i $ fvs c `S.difference` S.fromList (map fst is)
 fvs (CGet i1 i2) = S.fromList [i1, i2]
 fvs (CPut i1 i2 i3) = S.fromList [i1, i2, i3]
@@ -206,7 +208,8 @@ pprint (CMkCls _ (Closure entry fvs) c) =
     $+$ pprint c
 pprint (CAppCls x args) = text "c#" <> text x <+> hsep (map text args)
 pprint (CAppDir x args) = text x <+> hsep (map text args)
-pprint (CTuple ids) = parens $ hcat $ punctuate (text ", ") (map text ids)
+pprint (CTuple idtys) = parens $ hcat $
+    punctuate (text ", ") (map (\(i, t) -> text i <> char ':' <+> text (show t)) idtys)
 pprint (CLetTuple xts i c) =
     sep [ text "let" <+> parens (pprintArgs xts) <+> char '=' <+> text i
         , text "in"
