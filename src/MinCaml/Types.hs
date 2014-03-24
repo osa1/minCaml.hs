@@ -64,6 +64,11 @@ deriving instance Data Ty
 deriving instance Typeable Ty
 
 
+isFunTy :: Ty -> Bool
+isFunTy TyFun{} = True
+isFunTy _ = False
+
+
 type TyVar = Int
 
 

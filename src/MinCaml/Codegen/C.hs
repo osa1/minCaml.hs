@@ -8,12 +8,13 @@ import           Control.Applicative       hiding (empty)
 import           Control.Monad.State
 import           Data.List
 import qualified Data.Map                  as M
+import qualified Data.Set                  as S
 import           Text.PrettyPrint.HughesPJ
 
 import qualified MinCaml.ClosureConv       as CC
-import           MinCaml.Types             (Id, Ty (..))
+import           MinCaml.Types             (Id, Ty (..), isFunTy)
 
-import Debug.Trace
+import           Debug.Trace
 -------------------------------------------------------------------------------
 
 
@@ -168,25 +169,31 @@ test = pprintDecls decls
 
 
 main :: IO ()
-main = do
+main =
     putStrLn $ renderStyle (Style PageMode 90 0.9) test
 
 
 -------------------------------------------------------------------------------
 data CodegenState = CodegenState
     { -- states used for generating structs for tuples
-      tupleTys            :: M.Map [Ty] (String, [(String, CType)])
-    , lastTStruct         :: Int
+      tupleTys      :: M.Map [Ty] (String, [(String, CType)])
+    , lastTStruct   :: Int
 
-    , freshVar            :: Int
+      -- states used for generating structs for closures and closure envs
+    , closureTys    :: M.Map Ty String
+    , envTys        :: M.Map [(Id, Ty)] String
+    , lastClosureTy :: Int
+    , lastEnvTy     :: Int
+
+    , freshVar      :: Int
     } deriving (Show)
 
 initCodegenState :: M.Map Id CC.FunDef -> CodegenState
-initCodegenState closures = CodegenState M.empty 0 0
+initCodegenState closures = CodegenState M.empty 0 M.empty M.empty 0 0 0
   where
     cls = closures `M.union` builtins
     builtins = M.fromList
-      [ ("print_int", CC.FunDef "print_int" (TyFun [TyInt] TyUnit) [("i", TyInt)] [] Nothing) ]
+      [ ("print_int", CC.FunDef "print_int" (TyFun [TyInt] TyUnit) [("i", TyInt)] M.empty Nothing) ]
 
 
 newtype Codegen a = Codegen { unwrapCodegen :: State CodegenState a }
@@ -211,6 +218,36 @@ getTupleStructName tys = do
       ("tuple" ++ show i
       ,map (\(fi, ty) -> ("tuple" ++ show i ++ "field" ++ show fi, ty))
            (zip [1..] tys))
+
+
+getClosureStructName
+    :: Ty                       -- ^ closure function type
+    -> Codegen String           -- ^ struct name for closure
+getClosureStructName funty = do
+    st <- gets closureTys
+    case M.lookup funty st of
+      Nothing -> do
+        cty <- gets lastClosureTy
+        let cname = "closure" ++ show cty
+        modify $ \s -> s{lastClosureTy = cty + 1, closureTys = M.insert funty cname st}
+        -- TODO: generate struct code
+        return cname
+      Just n -> return n
+
+
+getEnvStructName
+    :: [(Id, Ty)]           -- ^ free variables and their types
+    -> Codegen String       -- ^ struct name for environment
+getEnvStructName fvs = do
+    st <- gets envTys
+    case M.lookup fvs st of
+      Nothing -> do
+        ety <- gets lastEnvTy
+        let envname = "env" ++ show ety
+        modify $ \s -> s{lastEnvTy = ety + 1, envTys = M.insert fvs envname st}
+        -- TODO: generate struct code
+        return envname
+      Just n -> return n
 
 
 test' :: String
@@ -287,7 +324,10 @@ genCC asgn (CC.CIfLe i1 i2 c1 c2) = do
                 c1'
                 [(CTrue, c2')]]
 genCC asgn (CC.CLet (i, t) c1 c2) = do
-    t' <- genTy t
+    t' <- if isFunTy t then
+            CStruct <$> getClosureStructName t
+          else
+            genTy t
     let decl = CVarDecl t' i Nothing
     declStat <- genCC (Just i) c1
     rest <- genCC asgn c2
@@ -310,8 +350,16 @@ genCC asgn (CC.CLetTuple binders i c) = do
     return $ binds ++ rest
 
 -- Compiling closures and closure applications
-{-genCC asgn (CC.CMkCls (fname, fty) closure rest) = undefined
-genCC asgn (CC.CAppCls fname args) = undefined-}
+genCC asgn (CC.CMkCls (var, ty) (CC.Closure entry fvs) rest) = do
+    clsname <- getClosureStructName ty
+    envname <- getEnvStructName (M.toList fvs)
+    envvar <- getBinder Nothing
+    let envStruct = CVarDecl (CTypeName envname) envvar (Just $ CStructE $ map (CVar . fst) $ M.toList fvs)
+        funStruct = CVarDecl (CTypeName clsname) var (Just $ CStructE [CVar $ var ++ "_fun" ,CVar envvar])
+    rest' <- genCC asgn rest
+    return $ envStruct : funStruct : rest'
+
+genCC asgn (CC.CAppCls fname args) = genCC asgn (CC.CAppDir fname args)
 
 genCC asgn (CC.CAppDir fname args) = do
     let as = map CVar args
@@ -327,16 +375,22 @@ genFunDefs = mapM genFunDef
 
 genFunDef :: CC.FunDef -> Codegen CDecl
 genFunDef CC.FunDef{..} = do
-    retty <- genTy (getFunRetTy ty)
+    retty <- do
+      let rt = getFunRetTy ty
+      if isFunTy rt then do
+        closureName <- getClosureStructName rt
+        return $ CTypeName closureName
+      else
+        genTy rt
     argTys <- mapM (genTy . snd) fargs
-    fdFvsTys <- mapM (genTy . snd) fdFvs
+    fdFvsTys <- mapM (genTy . snd) (M.toList fdFvs)
     body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
-    return $ CFunDecl retty name (zip argTys (map fst fargs) ++ zip fdFvsTys (map fst fdFvs))
+    return $ CFunDecl retty name (zip argTys (map fst fargs) ++ zip fdFvsTys (M.keys fdFvs))
                       (addRetStat retty body')
   where
     getFunRetTy :: Ty -> Ty
     getFunRetTy (TyFun _ retty) = retty
-    getFunRetTy ty = error $ "panic: functions has non-function type " ++ show ty
+    getFunRetTy ty = error $ "panic: function has non-function type " ++ show ty
 
     retName = "var_cg$funret"
 

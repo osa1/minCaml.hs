@@ -57,14 +57,14 @@ data CC
 
 data Closure = Closure
     { entry :: Id
-    , cFvs  :: S.Set (Id, Ty)
+    , cFvs  :: M.Map Id Ty
     } deriving (Show)
 
 data FunDef = FunDef
     { name  :: Id
     , ty    :: Ty
     , fargs :: [(Id, Ty)]
-    , fdFvs :: [(Id, Ty)]
+    , fdFvs :: M.Map Id Ty
     , body  :: Maybe CC
     } deriving (Show)
 
@@ -85,7 +85,7 @@ fvs (CIfEq i1 i2 c1 c2) = S.insert i1 $ S.insert i2 $ fvs c1 `S.union` fvs c2
 fvs (CIfLe i1 i2 c1 c2) = S.insert i1 $ S.insert i2 $ fvs c1 `S.union` fvs c2
 fvs (CLet (i, _) c1 c2) = fvs c1 `S.union` S.delete i (fvs c2)
 fvs (CVar i) = S.singleton i
-fvs (CMkCls (i, _) (Closure _ freevars) e) = S.delete i (S.map fst freevars `S.union` fvs e)
+fvs (CMkCls (i, _) (Closure _ freevars) e) = S.delete i (M.keysSet freevars `S.union` fvs e)
 fvs (CAppCls c ids) = S.fromList $ c : ids
 fvs (CAppDir _ ids) =
     -- here we deliberately ignore function name while generating free
@@ -149,15 +149,15 @@ cc env known k =
                            return (known, e1_)
 
         let e1'fvs' = S.delete x e1'fvs
-            zts = map (\z -> (z, fromJust $ M.lookup z env')) (S.toList e1'fvs')
-        -- add closure to top level declarations
-        modify (M.insert x (FunDef x t args zts (Just e1_)))
+            zts = M.fromList $ map (\z -> (z, fromJust $ M.lookup z env')) (S.toList e1'fvs')
+        -- add function part of the closure to top level declarations
+        modify (M.insert x (FunDef (x ++ "_fun") t args zts (Just e1_)))
         e2' <- cc env' known_ e2
         if S.member x (fvs e2') then
           -- step 3: x is used in e2' as a variable(i.e. passed to some
           -- other function, returned etc.), return MkCls
-          let addTys :: S.Set Id -> S.Set (Id, Ty)
-              addTys = S.map (\i -> (i, fromJust $ M.lookup i env))
+          let addTys :: S.Set Id -> M.Map Id Ty
+              addTys = M.fromList . map (\i -> (i, fromJust $ M.lookup i env)) . S.toList
           in return $ CMkCls (x, t) (Closure x (addTys e1'fvs')) e2'
         else
           -- x is used in e2' as function part of application, we can use
@@ -236,7 +236,7 @@ pprintDecls defs = iter (M.toList defs)
 pprintFunDef :: FunDef -> Doc
 pprintFunDef (FunDef _ _ fargs fdFvs body) =
     hang (text "fn" <> parens (pprintArgs fargs)
-                    <> brackets (pprintArgs fdFvs)
+                    <> brackets (pprintArgs $ M.toList fdFvs)
                     <+> char '=')
          2 (case body of
               Nothing -> text "<builtin>"
