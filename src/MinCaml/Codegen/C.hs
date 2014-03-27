@@ -1,4 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards #-}
+{-# LANGUAGE DeriveDataTypeable, GeneralizedNewtypeDeriving, RecordWildCards,
+             StandaloneDeriving #-}
 
 module MinCaml.Codegen.C where
 
@@ -6,6 +7,7 @@ module MinCaml.Codegen.C where
 -------------------------------------------------------------------------------
 import           Control.Applicative       hiding (empty)
 import           Control.Monad.State
+import           Data.Generics             hiding (empty)
 import           Data.List
 import qualified Data.Map                  as M
 import qualified Data.Set                  as S
@@ -50,11 +52,22 @@ data CExpr
     | CSelect CExpr String
     | CStructE [CExpr]
     | CGetAddr CExpr
+    | CPtrDeref CExpr
     deriving (Show)
 
 data CArithOp = CPlus | CMinus | CMult | CEqual | CLe
     deriving (Show)
 
+deriving instance Data CDecl
+deriving instance Data CType
+deriving instance Data CStat
+deriving instance Data CExpr
+deriving instance Data CArithOp
+deriving instance Typeable CDecl
+deriving instance Typeable CType
+deriving instance Typeable CStat
+deriving instance Typeable CExpr
+deriving instance Typeable CArithOp
 
 pprintCDecl :: CDecl -> Doc
 pprintCDecl (CFunDecl ty fname args body) =
@@ -147,6 +160,7 @@ pprintCExpr (CFloatE f) = float f
 pprintCExpr (CSelect e s) = parens (pprintCExpr e) <> char '.' <> text s
 pprintCExpr (CStructE es) = braces (sep $ punctuate comma $ map pprintCExpr es)
 pprintCExpr (CGetAddr e) = char '&' <> parens (pprintCExpr e)
+pprintCExpr (CPtrDeref e) = parens (char '*' <> pprintCExpr e)
 
 
 pprintFunCall :: CExpr -> [CExpr] -> Doc
@@ -397,8 +411,8 @@ genFunDef CC.FunDef{..}
       retty <- retTy
       argTys <- mapM (genTy . snd) fargs
       envTy <- getEnvStructName (M.toList fdFvs)
-      body' <- maybe (return Nothing) (liftM Just . genCC (Just retName)) body
-      return $ CFunDecl retty name (zip argTys (map fst fargs) ++ [(CPtr (CTypeName envTy), name ++ "_env")])
+      body' <- maybe (return Nothing) (liftM (Just . replaceFvs envTy) . genCC (Just retName)) body
+      return $ CFunDecl retty name (zip argTys (map fst fargs) ++ [(CPtr (CTypeName envTy), "__env")])
                         (addRetStat retty body')
   | otherwise = do
       retty <- retTy
@@ -407,6 +421,14 @@ genFunDef CC.FunDef{..}
       return $ CFunDecl retty name (zip argTys (map fst fargs))
                         (addRetStat retty body')
   where
+    replaceFvs :: String -> [CStat] -> [CStat]
+    replaceFvs envty = everywhere $ mkT (replaceFvs' envty)
+
+    replaceFvs' envty e@(CVar x)
+      | M.member x fdFvs = CSelect (CPtrDeref $ CVar "__env") (envty ++ "_" ++ x)
+      | otherwise = e
+    replaceFvs' _ e = e
+
     retTy :: Codegen CType
     retTy = do
       let rt = getFunRetTy ty
