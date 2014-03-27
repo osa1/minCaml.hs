@@ -138,7 +138,7 @@ cc env known k =
         e1' <- cc env' known' e1
         let e1'fvs = fvs e1' `S.difference` S.fromList (map fst args)
         -- now in order our assumption to hold, e1'fvs should be empty
-        (known_, e1_, closure) <-
+        (known_, e1_, cls) <-
           if S.null e1'fvs then
             return (known', e1', False)
           else do
@@ -151,8 +151,8 @@ cc env known k =
         let e1'fvs' = S.delete x e1'fvs
             zts = M.fromList $ map (\z -> (z, fromJust $ M.lookup z env')) (S.toList e1'fvs')
         -- add function part of the closure to top level declarations
-        let declName = if closure then x ++ "_fun" else x
-        modify (M.insert x (FunDef declName t args zts closure (Just e1_)))
+        let declName = if cls then x ++ "_fun" else x
+        modify (M.insert x (FunDef declName t args zts cls (Just e1_)))
 
         e2' <- cc env' known_ e2
         if S.member x (fvs e2') then

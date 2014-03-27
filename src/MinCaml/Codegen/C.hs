@@ -10,7 +10,6 @@ import           Control.Monad.State
 import           Data.Generics             hiding (empty)
 import           Data.List
 import qualified Data.Map                  as M
-import qualified Data.Set                  as S
 import           Text.PrettyPrint.HughesPJ
 
 import qualified MinCaml.ClosureConv       as CC
@@ -212,9 +211,6 @@ data CodegenState = CodegenState
 
 initCodegenState :: CodegenState
 initCodegenState = CodegenState M.empty 0 M.empty M.empty 0 0 M.empty M.empty 0
-  where
-    builtins = M.fromList
-      [ ("print_int", CC.FunDef "print_int" (TyFun [TyInt] TyUnit) [("i", TyInt)] M.empty False Nothing) ]
 
 
 newtype Codegen a = Codegen { unwrapCodegen :: State CodegenState a }
@@ -238,7 +234,7 @@ getTupleStructName tys = do
     mkStruct i tys =
       ("tuple" ++ show i
       ,map (\(fi, ty) -> ("tuple" ++ show i ++ "field" ++ show fi, ty))
-           (zip [1..] tys))
+           (zip [1 :: Int ..] tys))
 
 
 getClosureStructName
@@ -363,7 +359,6 @@ genCC asgn (CC.CLet (i, t) c1 c2) = do
 genCC asgn (CC.CTuple idtys) = do
     let tys = map snd idtys
         ids = map fst idtys
-    structName <- getTupleStructName tys
     var <- getBinder asgn
     return [CAssign var $ CStructE $ map CVar ids]
 genCC asgn (CC.CLetTuple binders i c) = do
@@ -371,12 +366,12 @@ genCC asgn (CC.CLetTuple binders i c) = do
     binderTys <- mapM (genTy . snd) binders
     let binderIds = map fst binders
         binds = map (\(fi, bi, t) -> CVarDecl t bi (Just $ CSelect (CVar i) (structName ++ "field" ++ show fi)))
-                    (zip3 [1..] binderIds binderTys)
+                    (zip3 [1 :: Int ..] binderIds binderTys)
     rest <- genCC asgn c
     return $ binds ++ rest
 
 -- Compiling closures and closure applications
-genCC asgn (CC.CMkCls (var, ty) (CC.Closure entry fvs) rest) = do
+genCC asgn (CC.CMkCls (var, ty) (CC.Closure _ fvs) rest) = do
     clsname <- getClosureStructName ty
     envname <- getEnvStructName (M.toList fvs)
     envvar <- getBinder Nothing
