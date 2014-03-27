@@ -455,7 +455,8 @@ codegen' funs code = do
     let funDecls = collectFunDecls funs'
     clsStructs <- M.toList <$> gets closureStructs
     envStructs <- M.toList <$> gets envStructs
-    let structs = map (uncurry CStrDecl) $ clsStructs ++ envStructs
+    tplStructs <- (map snd . M.toList) <$> gets tupleTys
+    let structs = map (uncurry CStrDecl) $ tplStructs ++ clsStructs ++ envStructs
     return $ vcat $ intersperse (text "")
       [ pprintDecls structs
       , pprintDecls funDecls
