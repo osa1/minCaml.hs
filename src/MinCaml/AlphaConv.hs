@@ -56,7 +56,6 @@ alphaConv' env (KLetTuple bs t e) = do
     KLetTuple (zip freshIds (map snd bs)) (find t env) <$> alphaConv' env' e
 alphaConv' env (KGet x y) = return $ KGet (find x env) (find y env)
 alphaConv' env (KPut x y z) = return $ KPut (find x env) (find y env) (find z env)
-alphaConv' _ e@KExtArray{} = return e
 alphaConv' env (KExtFunApp x args) = return $ KExtFunApp x (map (flip find env) args)
 
 

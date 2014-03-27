@@ -52,7 +52,6 @@ data CC
     | CLetTuple [(Id, Ty)] Id CC
     | CGet Id Id
     | CPut Id Id Id
-    | CExtArray Id
     deriving (Show)
 
 data Closure = Closure
@@ -96,7 +95,6 @@ fvs (CTuple is) = S.fromList $ map fst is
 fvs (CLetTuple is i c) = S.insert i $ fvs c `S.difference` S.fromList (map fst is)
 fvs (CGet i1 i2) = S.fromList [i1, i2]
 fvs (CPut i1 i2 i3) = S.fromList [i1, i2, i3]
-fvs (CExtArray _) = S.empty
 
 
 closureConv :: KNormal -> (CC, M.Map Id FunDef)
@@ -175,7 +173,6 @@ cc env known k =
       KLetTuple xs b e -> CLetTuple xs b <$> cc (M.fromList xs `M.union` env) known e
       KGet x y -> return $ CGet x y
       KPut x y z -> return $ CPut x y z
-      KExtArray x -> return $ CExtArray x
       KExtFunApp x args -> return $ CAppDir ("min_caml_" ++ x) args
 
 
@@ -220,7 +217,6 @@ pprint (CLetTuple xts i c) =
         ] $$ pprint c
 pprint (CGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (CPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
-pprint (CExtArray x) = char '#' <> parens (text x)
 
 
 pprintArgs :: [(Id, Ty)] -> Doc

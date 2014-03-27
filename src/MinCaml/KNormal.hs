@@ -43,7 +43,6 @@ data KNormal
     | KLetTuple [(Id, Ty)] Id KNormal
     | KGet Id Id
     | KPut Id Id Id
-    | KExtArray Id
     | KExtFunApp Id [Id]
     deriving (Show)
 
@@ -78,7 +77,6 @@ fvs (KTuple is) = S.fromList $ map fst is
 fvs (KLetTuple is i k) = S.insert i $ fvs k `S.difference` S.fromList (map fst is)
 fvs (KGet i1 i2) = S.fromList [i1, i2]
 fvs (KPut i1 i2 i3) = S.fromList [i1, i2, i3]
-fvs (KExtArray _) = S.empty
 fvs (KExtFunApp _ is) = S.fromList is
 
 
@@ -264,7 +262,6 @@ pprint (KLetTuple xts i k) =
         ] $$ pprint k
 pprint (KGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (KPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
-pprint (KExtArray x) = char '#' <> parens (text x)
 pprint (KExtFunApp x args) = char '#' <> text x <+> hsep (map text args)
 
 
