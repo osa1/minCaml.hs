@@ -416,6 +416,7 @@ genFunDef CC.FunDef{..}
       return $ CFunDecl retty name (zip argTys (map fst fargs))
                         (addRetStat retty body')
   where
+    -- | Replace free variables in function body with environment lookups
     replaceFvs :: String -> [CStat] -> [CStat]
     replaceFvs envty = everywhere $ mkT (replaceFvs' envty)
 
@@ -458,13 +459,16 @@ codegen' funs code = do
     tplStructs <- (map snd . M.toList) <$> gets tupleTys
     let structs = map (uncurry CStrDecl) $ tplStructs ++ clsStructs ++ envStructs
     return $ vcat $ intersperse (text "")
-      [ pprintDecls structs
+      [ includes
+      , pprintDecls structs
       , pprintDecls funDecls
       , pprintDecls funs'
       , mkMain (pprintBlock code')
       ]
   where
     mkMain c = text "int" <+> text "main" <> parens empty $+$ c
+
+    includes = text "#include \"builtins.h\""
 
     collectFunDecls :: [CDecl] -> [CDecl]
     collectFunDecls [] = []
