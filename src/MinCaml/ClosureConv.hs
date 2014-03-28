@@ -98,7 +98,7 @@ fvs (CPut i1 i2 i3) = S.fromList [i1, i2, i3]
 
 
 closureConv :: KNormal -> (CC, M.Map Id FunDef)
-closureConv k = runState (cc init_env S.empty k) M.empty
+closureConv k = runState (cc init_env (S.singleton "print_int") k) M.empty
 
 
 cc :: M.Map Id Ty -> S.Set Id -> KNormal -> State (M.Map Id FunDef) CC
