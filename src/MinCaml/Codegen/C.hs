@@ -238,18 +238,20 @@ getTupleStructName tys = do
 
 
 getClosureStructName
-    :: Ty                       -- ^ closure function type
+    :: [Ty]                     -- ^ function argument types
+    -> Ty                       -- ^ function return type
     -> Codegen Id               -- ^ struct name for closure
-getClosureStructName funty = do
+getClosureStructName argtys retty = do
     st <- gets closureTys
-    CFunPtr retty argtys <- genTy funty
-    let argtys' = argtys ++ [CVoidPtr]
+    let funty = TyFun argtys retty
+    argtys' <- liftM (++ [CVoidPtr]) (mapM genTy argtys)
+    retty' <- genTy retty
     case M.lookup funty st of
       Nothing -> do
         cty <- gets lastClosureTy
         let cname = "closure" ++ show cty
         modify $ \s -> s{lastClosureTy = cty + 1, closureTys = M.insert funty cname st}
-        let struct = [(cname ++ "_fun", CFunPtr retty argtys'), (cname ++ "_env", CVoidPtr)]
+        let struct = [(cname ++ "_fun", CFunPtr retty' argtys'), (cname ++ "_env", CVoidPtr)]
         modify $ \s -> s{closureStructs = M.insert cname struct (closureStructs s)}
         return cname
       Just n -> return n
@@ -295,7 +297,7 @@ genTy TyInt = return CInt
 genTy TyFloat = return CFloat
 genTy (TyTuple tys) = CTypeName <$> getTupleStructName tys
 genTy (TyArr ty) = CPtr <$> genTy ty
-genTy (TyFun argtys retty) = CFunPtr <$> genTy retty <*> mapM genTy argtys
+genTy (TyFun argtys retty) = CTypeName <$> getClosureStructName argtys retty
 genTy (TyVar tyvar) = error $ "uninstantiated type variable in genTy: " ++ show tyvar
 
 
@@ -346,10 +348,9 @@ genCC asgn (CC.CIfLe i1 i2 c1 c2) = do
                 c1'
                 [(CTrue, c2')]]
 genCC asgn (CC.CLet (i, t) c1 c2) = do
-    t' <- if isFunTy t then
-            CStruct <$> getClosureStructName t
-          else
-            genTy t
+    t' <- case t of
+            TyFun as r -> CStruct <$> getClosureStructName as r
+            _ -> genTy t
     let decl = CVarDecl t' i Nothing
     declStat <- genCC (Just i) c1
     rest <- genCC asgn c2
@@ -371,8 +372,8 @@ genCC asgn (CC.CLetTuple binders i c) = do
     return $ binds ++ rest
 
 -- Compiling closures and closure applications
-genCC asgn (CC.CMkCls (var, ty) (CC.Closure _ fvs) rest) = do
-    clsname <- getClosureStructName ty
+genCC asgn (CC.CMkCls (var, TyFun argtys retty) (CC.Closure _ fvs) rest) = do
+    clsname <- getClosureStructName argtys retty
     envname <- getEnvStructName (M.toList fvs)
     envvar <- getBinder Nothing
     let envStruct = CVarDecl (CTypeName envname) envvar (Just $ CStructE $ map (CVar . fst) $ M.toList fvs)
@@ -380,8 +381,8 @@ genCC asgn (CC.CMkCls (var, ty) (CC.Closure _ fvs) rest) = do
                                                                       ,CGetAddr $ CVar envvar])
     rest' <- genCC asgn rest
     return $ envStruct : funStruct : rest'
-genCC asgn (CC.CAppCls cname fty args) = do
-    clsname <- getClosureStructName fty
+genCC asgn (CC.CAppCls cname (TyFun argtys retty) args) = do
+    clsname <- getClosureStructName argtys retty
     let as = map CVar args ++ [CSelect (CVar cname) (clsname ++ "_env")]
         appl = CSelect (CVar cname) (clsname ++ "_fun")
     return $ case asgn of
@@ -427,12 +428,9 @@ genFunDef CC.FunDef{..}
 
     retTy :: Codegen CType
     retTy = do
-      let rt = getFunRetTy ty
-      if isFunTy rt then do
-        closureName <- getClosureStructName rt
-        return $ CTypeName closureName
-      else
-        genTy rt
+      case getFunRetTy ty of
+        TyFun as r -> CTypeName <$> getClosureStructName as r
+        rt -> genTy rt
 
     getFunRetTy :: Ty -> Ty
     getFunRetTy (TyFun _ retty) = retty
