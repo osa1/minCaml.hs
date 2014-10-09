@@ -2,12 +2,9 @@
 
 module MinCaml.Types where
 
-
 import           Data.Generics
 
-
--------------------------------------------------------------------------------
--- Terms
+-- * Terms
 
 data Tm
     = TUnit
@@ -40,14 +37,12 @@ data Tm
 deriving instance Data Tm
 deriving instance Typeable Tm
 
-
 data FunDef = FunDef (Id, Ty) [(Id, Ty)] Tm deriving (Show)
 
 deriving instance Data FunDef
 deriving instance Typeable FunDef
 
--------------------------------------------------------------------------------
--- Types
+-- * Types
 
 data Ty
     = TyUnit
@@ -63,16 +58,12 @@ data Ty
 deriving instance Data Ty
 deriving instance Typeable Ty
 
-
 isFunTy :: Ty -> Bool
 isFunTy TyFun{} = True
 isFunTy _ = False
 
-
 type TyVar = Int
 
-
--------------------------------------------------------------------------------
--- Identifiers
+-- * Identifiers
 
 type Id = String

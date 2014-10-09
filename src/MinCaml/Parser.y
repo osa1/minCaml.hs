@@ -28,7 +28,6 @@ import MinCaml.Types
 %left PREC_APP
 %left '.'
 
-
 %token
   bool    { (Bool $$, _) }
   int     { (Int $$, _) }
@@ -133,7 +132,6 @@ Pat : Pat ',' ident              {% freshTy >>= \ty -> return ($1 ++ [($3, ty)])
 
 {
 
-
 data ParserState = ParserState
     { freshTy_ :: TyVar
     , freshId_ :: Int
@@ -141,13 +139,11 @@ data ParserState = ParserState
 
 initParserState = ParserState 0 0
 
-
 freshTy :: State ParserState Ty
 freshTy = do
     s@ParserState{freshTy_=freshTy} <- get
     put s{freshTy_ = freshTy + 1}
     return $ TyVar freshTy
-
 
 freshVar :: State ParserState Id
 freshVar = do
@@ -155,17 +151,14 @@ freshVar = do
     put s{freshId_ = freshId + 1}
     return $ "var_p" ++ show freshId
 
-
 parseError :: [TokPos] -> a
 parseError ((_, posn) : ts) = error $ "Parse error at " ++ show posn
-
 
 parseStr :: String -> Either String Tm
 parseStr str =
     case lex str of
       Left err -> Left err
       Right tokens -> Right $ evalState (parse $ init tokens) initParserState
-
 
 parseStr' :: String -> Either String (Tm, TyVar)
 parseStr' str =
@@ -175,13 +168,10 @@ parseStr' str =
         let (tm, state) = runState (parse $ init tokens) initParserState
         in Right (tm, freshTy_ state)
 
-
 parseFile :: FilePath -> IO (Either String Tm)
 parseFile path = readFile path >>= return . parseStr
 
-
 parseFile' :: FilePath -> IO (Either String (Tm, TyVar))
 parseFile' path = readFile path >>= return . parseStr'
-
 
 }

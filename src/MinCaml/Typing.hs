@@ -2,8 +2,6 @@
 
 module MinCaml.Typing where
 
-
--------------------------------------------------------------------------------
 import           MinCaml.Types
 
 import           Control.Applicative
@@ -12,15 +10,11 @@ import           Control.Monad.Identity
 import           Control.Monad.State
 import           Data.Generics
 import qualified Data.Map               as M
--------------------------------------------------------------------------------
 
-
--------------------------------------------------------------------------------
 data TypingState = TypingState
     { unifications_ :: M.Map TyVar Ty
     , freshTyVar_   :: TyVar
     } deriving (Show)
-
 
 data UnificationError
     = OccursCheck Ty Ty
@@ -32,36 +26,29 @@ data UnificationError
 instance Error UnificationError where
     strMsg = StrErr
 
-
 newtype Unify a = Unify { unwrapUnify :: StateT TypingState (ErrorT UnificationError Identity) a }
     deriving (Functor, Applicative, Monad, MonadState TypingState, MonadError UnificationError)
-
 
 evalUnify :: Unify a -> TypingState -> Either UnificationError a
 evalUnify a s = runIdentity $ runErrorT $ evalStateT (unwrapUnify a) s
 
-
 runUnify :: Unify a -> TypingState -> Either UnificationError (a, TypingState)
 runUnify a s = runIdentity $ runErrorT $ runStateT (unwrapUnify a) s
-
 
 lookupTyvar :: TyVar -> Unify (Maybe Ty)
 lookupTyvar tyvar = do
     us <- gets unifications_
     return $ M.lookup tyvar us
 
-
 bindTyvar :: TyVar -> Ty -> Unify ()
 bindTyvar var ty =
     modify (\s@TypingState{unifications_=us} -> s{unifications_=M.insert var ty us})
-
 
 freshTyVar :: Unify TyVar
 freshTyVar = do
     s@TypingState{freshTyVar_=ftv} <- get
     put s{freshTyVar_=ftv+1}
     return ftv
-
 
 init_env :: M.Map Id Ty
 init_env = M.fromList
@@ -76,8 +63,6 @@ init_env = M.fromList
   , ("print_newline", TyFun [TyUnit] TyUnit)
   ]
 
-
--------------------------------------------------------------------------------
 infer :: M.Map Id Ty -> Tm -> Unify Ty
 infer _ TUnit = return TyUnit
 infer _ TBool{} = return TyBool
@@ -164,16 +149,13 @@ infer env (TPut e1 e2 e3) = do
     unifyExp env e2 TyInt
     return TyUnit
 
-
 addTys :: [(Id, Ty)] -> M.Map Id Ty -> M.Map Id Ty
 addTys args env = foldl (flip $ uncurry M.insert) env args
-
 
 unifyExp :: M.Map Id Ty -> Tm -> Ty -> Unify ()
 unifyExp env tm ty = do
     expty <- infer env tm
     unify expty ty
-
 
 unify :: Ty -> Ty -> Unify ()
 unify ty1 ty2 = do
@@ -194,7 +176,6 @@ unify ty1 ty2 = do
       (_, TyVar var2) -> bindTyvar var2 ty1'
       _ -> throwError $ UnificationError ty1' ty2'
 
-
 occursCheck :: Ty -> Ty -> Unify Bool
 occursCheck ty1 ty2 =
     case ty2 of
@@ -213,7 +194,6 @@ occursCheck ty1 ty2 =
               Just ty' -> occursCheck ty1 ty'
       _ -> return False
 
-
 prune :: Ty -> Unify Ty
 prune (TyVar tyvar) = do
     tyvar' <- lookupTyvar tyvar
@@ -230,7 +210,6 @@ prune (TyFun tys ty) = do
 prune (TyTuple tys) = TyTuple <$> mapM prune tys
 prune (TyArr ty) = TyArr <$> prune ty
 prune ty = return ty
-
 
 -- | Replace type variables in binders with their unified types
 eliminateTyVars :: Tm -> Unify Tm

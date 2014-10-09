@@ -1,4 +1,3 @@
-
 -- | K-normalization
 module MinCaml.KNormal
   ( KNormal(..)
@@ -9,18 +8,13 @@ module MinCaml.KNormal
   , fvs
   ) where
 
-
--------------------------------------------------------------------------------
 import           Control.Monad.State
 import qualified Data.Map                  as M
 import qualified Data.Set                  as S
 import           Text.PrettyPrint.HughesPJ
 
 import           MinCaml.Types
--------------------------------------------------------------------------------
 
-
--------------------------------------------------------------------------------
 data KNormal
     = KUnit
     | KInt Int
@@ -49,8 +43,6 @@ data KNormal
 data KFunDef = KFunDef (Id, Ty) [(Id, Ty)] KNormal
     deriving (Show)
 
-
--------------------------------------------------------------------------------
 -- | Free variables
 fvs :: KNormal -> S.Set Id
 fvs KUnit = S.empty
@@ -79,15 +71,11 @@ fvs (KGet i1 i2) = S.fromList [i1, i2]
 fvs (KPut i1 i2 i3) = S.fromList [i1, i2, i3]
 fvs (KExtFunApp _ is) = S.fromList is
 
-
--------------------------------------------------------------------------------
--- | K-normalization
 freshId :: State Int Id
 freshId = do
     i <- get
     put (i + 1)
     return $ "var_k" ++ show i
-
 
 insertLet :: (KNormal, Ty) -> (Id -> State Int (KNormal, Ty)) -> State Int (KNormal, Ty)
 insertLet (KVar i, _) k = k i
@@ -96,10 +84,8 @@ insertLet (e, t) k = do
     (e', t') <- k x
     return (KLet (x, t) e e', t')
 
-
 knormal :: M.Map Id Ty -> Tm -> (KNormal, Ty)
 knormal env tm = evalState (knormal' env tm) 0
-
 
 knormal' :: M.Map Id Ty -> Tm -> State Int (KNormal, Ty)
 knormal' _ TUnit = return (KUnit, TyUnit)
@@ -206,8 +192,6 @@ knormal' env (TPut e1 e2 e3) = do
     e3k <- knormal' env e3
     insertLet e1k $ \x -> insertLet e2k $ \y -> insertLet e3k $ \z -> return (KPut x y z, TyUnit)
 
-
--------------------------------------------------------------------------------
 -- | Flatten let-bindings
 flatten :: KNormal -> KNormal
 flatten (KIfEq x y e1 e2) = KIfEq x y (flatten e1) (flatten e2)
@@ -222,8 +206,6 @@ flatten (KLetRec (KFunDef name args body) e) = KLetRec (KFunDef name args (flatt
 flatten (KLetTuple xts y e) = KLetTuple xts y (flatten e)
 flatten e = e
 
-
--------------------------------------------------------------------------------
 -- | Pretty printer
 pprint :: KNormal -> Doc
 pprint KUnit = text "()"
@@ -264,10 +246,8 @@ pprint (KGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (KPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
 pprint (KExtFunApp x args) = char '#' <> text x <+> hsep (map text args)
 
-
 pprintArgs :: [(Id, Ty)] -> Doc
 pprintArgs = sep . punctuate (char ',') . map (\(x, t) -> text x <> text ": " <> text (show t))
-
 
 pprintFunDef :: KFunDef -> Doc
 pprintFunDef (KFunDef (x, t) args body) =

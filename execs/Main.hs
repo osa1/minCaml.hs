@@ -1,8 +1,5 @@
-
 module Main where
 
-
--------------------------------------------------------------------------------
 import qualified Data.Map                  as M
 import           System.Environment
 import           Text.PrettyPrint.HughesPJ hiding (render)
@@ -13,13 +10,9 @@ import qualified MinCaml.Codegen.C         as Codegen
 import qualified MinCaml.KNormal           as KN
 import           MinCaml.Parser
 import           MinCaml.Typing
--------------------------------------------------------------------------------
 
-
--------------------------------------------------------------------------------
 render :: Doc -> IO ()
 render = putStrLn . renderStyle (Style PageMode 80 0.9)
-
 
 main :: IO ()
 main = do

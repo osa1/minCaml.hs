@@ -1,7 +1,5 @@
-
 -- | Alpha conversion: give every binder a unique name
 module MinCaml.AlphaConv (alphaConv) where
-
 
 import           Control.Applicative
 import           Control.Monad.State
@@ -10,17 +8,14 @@ import           Data.Maybe          (fromMaybe)
 import           MinCaml.KNormal
 import           MinCaml.Types
 
-
 alphaConv :: KNormal -> KNormal
 alphaConv k = evalState (alphaConv' M.empty k) 0
-
 
 freshId :: State Int Id
 freshId = do
     i <- get
     put (i + 1)
     return $ "var_a" ++ show i
-
 
 alphaConv' :: M.Map Id Id -> KNormal -> State Int KNormal
 alphaConv' _ KUnit = return KUnit
@@ -57,7 +52,6 @@ alphaConv' env (KLetTuple bs t e) = do
 alphaConv' env (KGet x y) = return $ KGet (find x env) (find y env)
 alphaConv' env (KPut x y z) = return $ KPut (find x env) (find y env) (find z env)
 alphaConv' env (KExtFunApp x args) = return $ KExtFunApp x (map (flip find env) args)
-
 
 find :: Id -> M.Map Id Id -> Id
 find i env = fromMaybe i $ M.lookup i env

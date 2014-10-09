@@ -11,7 +11,6 @@ import Prelude hiding (lex)
 
 %wrapper "monadUserState"
 
-
 $space = [ \ \t \r ]                     -- horizontal white space
 
 $letter      = [a-zA-Z_]                 -- first letter of variables
@@ -64,10 +63,8 @@ type AlexUserState = Int -- number of last fresh var
 
 alexInitUserState = 0
 
-
 alexEOF :: Alex TokPos
 alexEOF = return (EOF, AlexPn (-1) (-1) (-1))
-
 
 data Token
     = Bool Bool | Int Int | Float Float | Not | Minus
@@ -80,18 +77,14 @@ data Token
 
 type TokPos = (Token, AlexPosn)
 
-
 tokWValue :: Read a => (a -> Token) -> AlexInput -> Int -> Alex TokPos
 tokWValue tok (posn,_,_,s) len = return (tok (read $ take len s), posn)
-
 
 convertHaskellFloat :: AlexInput -> Int -> Alex TokPos
 convertHaskellFloat (posn,_,_,s) len = return (Float (read $ take len s ++ "0"), posn)
 
-
 tok :: Token -> AlexInput -> Int -> Alex TokPos
 tok t (posn,_,_,_) _ = return (t, posn)
-
 
 ident :: AlexAction TokPos
 ident (posn,_,_,s) len = Alex $ \s@AlexState{alex_ust=var} ->
@@ -116,7 +109,6 @@ ident (posn,_,_,s) len = Alex $ \s@AlexState{alex_ust=var} ->
                 "_"            -> (var+1, Ident $ "var_l" ++ show var)
                 ident'         -> (var, Ident ident')
 
-
 lex :: String -> Either String [TokPos]
 lex str = runAlex str loop
   where loop = do
@@ -126,9 +118,7 @@ lex str = runAlex str loop
             else do toks <- loop
                     return (t : toks)
 
-
 lexFile :: FilePath -> IO (Either String [TokPos])
 lexFile p = fmap lex (readFile p)
-
 
 }

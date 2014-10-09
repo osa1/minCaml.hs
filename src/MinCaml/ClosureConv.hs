@@ -1,5 +1,3 @@
-
-
 -- | Closure conversion
 module MinCaml.ClosureConv
   ( closureConv
@@ -10,8 +8,6 @@ module MinCaml.ClosureConv
   , pprintDecls
   ) where
 
-
--------------------------------------------------------------------------------
 import           Control.Applicative       hiding (empty)
 import           Control.Monad.State
 import qualified Data.Map                  as M
@@ -19,16 +15,12 @@ import           Data.Maybe                (fromJust)
 import qualified Data.Set                  as S
 import           Text.PrettyPrint.HughesPJ
 
-
 import           MinCaml.KNormal           hiding (fvs, pprint)
 import           MinCaml.Types             hiding (FunDef)
 import           MinCaml.Typing            (init_env)
 
 import           Debug.Trace
--------------------------------------------------------------------------------
 
-
--------------------------------------------------------------------------------
 data CC
     = CUnit
     | CInt Int
@@ -68,7 +60,6 @@ data FunDef = FunDef
     , body    :: Maybe CC
     } deriving (Show)
 
-
 fvs :: CC -> S.Set Id
 fvs CUnit = S.empty
 fvs (CInt _) = S.empty
@@ -96,10 +87,8 @@ fvs (CLetTuple is i c) = S.insert i $ fvs c `S.difference` S.fromList (map fst i
 fvs (CGet i1 i2) = S.fromList [i1, i2]
 fvs (CPut i1 i2 i3) = S.fromList [i1, i2, i3]
 
-
 closureConv :: KNormal -> (CC, M.Map Id FunDef)
 closureConv k = runState (cc init_env S.empty k) M.empty
-
 
 cc :: M.Map Id Ty -> S.Set Id -> KNormal -> State (M.Map Id FunDef) CC
 cc env known k =
@@ -175,8 +164,6 @@ cc env known k =
       KPut x y z -> return $ CPut x y z
       KExtFunApp x args -> return $ CAppDir ("min_caml_" ++ x) args
 
-
--------------------------------------------------------------------------------
 -- | Pretty printer
 pprint :: CC -> Doc
 pprint CUnit = text "()"
@@ -218,10 +205,8 @@ pprint (CLetTuple xts i c) =
 pprint (CGet i1 i2) = parens (text i1) <> char '.' <> text i2
 pprint (CPut i1 i2 i3) = parens (text i1) <> char '.' <> text i2 <+> text "<-" <+> text i3
 
-
 pprintArgs :: [(Id, Ty)] -> Doc
 pprintArgs = sep . punctuate (char ',') . map (\(x, t) -> text x <> text ": " <> text (show t))
-
 
 -- | Pretty-print top-level declarations
 pprintDecls :: M.Map Id FunDef -> Doc
@@ -231,7 +216,6 @@ pprintDecls defs = iter (M.toList defs)
     iter ((x, def) : rest) =
       hang (text x <> char ':' <+> text (show $ ty def) <+> char '=')
            4 (pprintFunDef def) $$ iter rest
-
 
 pprintFunDef :: FunDef -> Doc
 pprintFunDef (FunDef _ _ fargs fdFvs closure body) =
