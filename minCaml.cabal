@@ -18,7 +18,10 @@ library
                        containers >=0.5 && <0.7,
                        array >=0.4 && <0.6,
                        syb >= 0.4 && < 0.5,
-                       pretty >= 1.1 && < 1.2
+                       pretty >= 1.1 && < 1.2,
+                       -- handling FFI parts in executable to be able
+                       -- to load the lib in GHCi
+                       llvm-general-pure >=3.4 && <3.5
 
   exposed-modules:     MinCaml.Types,
                        MinCaml.Typing,
@@ -27,7 +30,8 @@ library
                        MinCaml.KNormal,
                        MinCaml.AlphaConv,
                        MinCaml.ClosureConv,
-                       MinCaml.Codegen.C
+                       MinCaml.Codegen.C,
+                       MinCaml.Codegen.LLVM
   -- other-modules:
   hs-source-dirs:      src
   build-tools:         alex, happy
@@ -40,7 +44,10 @@ executable minCaml.hs
                        mtl >=2.1 && <2.3,
                        containers >=0.5 && <0.7,
                        minCaml == 0.1.0.0,
-                       pretty >= 1.1 && < 1.2
+                       pretty >= 1.1 && < 1.2,
+                       llvm-general >=3.4 && <3.5,
+                       filepath,
+                       safe
 
   hs-source-dirs:      execs
   default-language:    Haskell2010
